@@ -199,8 +199,8 @@ fun PlayerScreen(
 
 private fun formatTime(ms: Long): String {
     if (ms <= 0) return "0:00"
-    val totalSeconds = floor(ms / 1000.0).toInt()
+    val totalSeconds = (ms / 1000).toInt()
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
-    return "%d:%02d".format(minutes, seconds)
+    return "$minutes:${seconds.toString().padStart(2, '0')}"
 }

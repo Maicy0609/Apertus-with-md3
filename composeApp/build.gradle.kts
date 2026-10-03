@@ -56,6 +56,7 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.ktor.client.okhttp)
             implementation(libs.coil.network.okhttp)
+            implementation(libs.androidx.activity.compose)
         }
 
         val desktopMain by getting {
@@ -89,12 +90,12 @@ kotlin {
 
 android {
     namespace = "app.melody"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "app.melody"
         minSdk = 24
-        targetSdk = 35
+        targetSdk = 37
         versionCode = 1
         versionName = "0.1.0"
     }
