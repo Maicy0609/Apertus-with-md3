@@ -45,7 +45,17 @@ jobs:
           echo "SDK_ROOT=$SDK_ROOT"
           echo "SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
 
-          SDKMANAGER="$(command -v sdkmanager || true)"
+          # sdkmanager is NOT on PATH on the GitHub runner images: the SDK is
+          # preinstalled under /usr/local/lib/android/sdk with cmdline-tools in
+          # a versioned subdirectory, so probe the known locations first.
+          SDKMANAGER=""
+          for candidate in \
+            "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+            "$(command -v sdkmanager 2>/dev/null || true)" \
+            "$SDK_ROOT/cmdline-tools/16.0/bin/sdkmanager"
+          do
+            if [ -n "$candidate" ] && [ -x "$candidate" ]; then SDKMANAGER="$candidate"; break; fi
+          done
           if [ -z "$SDKMANAGER" ]; then
             SDKMANAGER="$(find "$SDK_ROOT" -maxdepth 5 -type f -name sdkmanager -print -quit || true)"
           fi
