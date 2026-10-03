@@ -31,6 +31,8 @@
 | 37120644505 | `6eac01f` | ✗ | **源码被写坏**：19 个 `.kt` 全被加 BOM，5 个文件非 ASCII 文本成了 GBK 乱码 |
 | 37120774195 | `c066935` | ✗ | 编码修好了、编译通过；新加的 APK 闸门里有一条 `grep` 写错，误判 |
 | 37120911164 | `f12b40a` | 部分 | build ✓（含 verify ✓）；smoke ✗ —— ComponentName 短格式导致字符串比较失败 |
+| 37121121961 | `aa0a799` | **✓✓** | **最终全绿**：编码体检 + 构建 + APK 校验 + 模拟器冒烟全部通过 |
+| — | `4114968` | 未触发 | 纯 `.md` 提交，按 `paths-ignore` 规则不产生 run（已确认生效） |
 
 失败记录保留在这里是有意的：**这次事故的教训就是"编译通过"证明不了任何事**。
 
@@ -461,6 +463,69 @@ Displayed app.melody/app.MainActivity for user 0: +9s56ms
 
 `Displayed ... +9s56ms` 说明第一帧真的画出来了；**crash buffer 0 行**说明没有任何崩溃。
 这正是原始 bug 的反面：修复前走不到 `Displayed` 就被 `ClassNotFoundException` 带走了。
+
+### 7.3 最终全绿（run 37121121961 / `aa0a799`）
+
+两个 job 全部 success：
+
+```
+JOB Build debug APK:               completed/success  (11:54:05Z -> 11:55:17Z)
+JOB Launch smoke test (emulator):  completed/success  (11:55:21Z -> 11:57:40Z)
+```
+
+编码体检：
+
+```
+==== 源码编码体检 (BOM / 合法 UTF-8 / U+FFFD) ====
+  检查了 40 个文本文件
+  [ok] 全部是无 BOM 的合法 UTF-8，且不含替换字符
+==== 编码体检通过 ====
+```
+
+APK 完整性校验（8 项全过）：
+
+```
+==== 0. 定位工具与产物 ====       [ok] APK 存在 (24440500 字节)
+==== 1. ZIP 容器完整性 ====        [ok] ZIP 结构完整, 无 CRC 错误 / 截断
+==== 2. aapt2 dump badging ====    [ok] package 名 = com.apertus.music
+                                   [ok] launcher activity = com.apertus.music.MainActivity
+                                   [ok] 声明了 INTERNET 权限
+==== 3. 明文 manifest ====         [ok] apkanalyzer manifest print 成功
+==== 4. apk summary ====           [ok] apkanalyzer 报告的包名一致
+==== 5. 对齐 ====                  [ok] zipalign 校验通过
+==== 6. 签名 ====                  [ok] 签名有效
+==== 7. apkcheck.py ====           条目 136 (STORED 75)  native-lib 4
+                                   (13 个 dex 全部 dex 037  header=0x70)
+                                   manifest 点名的 5 个组件类, DEX 里全部存在
+                                   DEX 里共 37077 个类
+                                   PASS  composeApp-debug.apk
+                                   [ok] apkcheck.py 通过
+==== 8. dex packages 交叉确认 ==== [ok] dex 里确实定义了 com.apertus.music.MainActivity
+==== 结果 ====
+sha256=3f2f11559cdff7faae301ee3a5492dc7e1ab1614d40dc847c9e6db18584b05cf
+result=PASS
+APK VERIFICATION PASSED: 容器 / dex / 对齐 / 签名 / 清单引用全部通过。
+```
+
+模拟器冒烟：
+
+```
+== Installing                                        Success
+== Launcher activity resolved from AndroidManifest.xml
+resolved: 'com.apertus.music/com.apertus.music.MainActivity'   (adb 原始输出: 'com.apertus.music/.MainActivity')
+expected: 'com.apertus.music/com.apertus.music.MainActivity'
+== Launching via LAUNCHER intent (monkey)
+Events injected: 1
+    topResumedActivity=ActivityRecord{cb8926 u0 com.apertus.music/.MainActivity t8}
+pid: '3091'
+== main log: 33580 lines | crash buffer: 0 lines
+Displayed com.apertus.music/.MainActivity for user 0: +4s559ms
+SMOKE TEST PASSED: com.apertus.music resolved to com.apertus.music/com.apertus.music.MainActivity,
+                   launched, and is still running (pid 3091).
+```
+
+注意这里 `resolved:` 一行同时打印了 adb 的**原始**输出（`com.apertus.music/.MainActivity`，
+短格式）和规范化后的结果 —— 这正是 §5.8 那次误报留下的痕迹，留着便于以后排查。
 
 ---
 
