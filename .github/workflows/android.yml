@@ -124,6 +124,11 @@ jobs:
       - name: Build debug APK
         run: ./gradlew :composeApp:assembleDebug --stacktrace --no-daemon
 
+      # 单元测试: 播放/跳转逻辑与性能护栏。见 composeApp/src/commonTest/。
+      # 跑在 JVM 上 (desktopTest), 不需要模拟器, 所以能挡住绝大多数回归。
+      - name: Run unit tests
+        run: ./gradlew :composeApp:desktopTest --stacktrace --no-daemon
+
       # APK 合法性 / 完整性闸门。见 .github/scripts/verify-apk.sh:
       # ZIP + dex 头部 + 对齐 + 压缩方式 + 签名 + **清单里点名的类是否真的在 DEX 里**。
       # 最后一条是"APK 打开就闪退"的静态回归闸门 —— 编译/打包/签名都会通过,
@@ -150,7 +155,7 @@ jobs:
           if-no-files-found: ignore
 
   smoke-test:
-    name: Launch smoke test (emulator)
+    name: Launch smoke test + performance gate (emulator)
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -178,7 +183,13 @@ jobs:
           sudo udevadm trigger --name-match=kvm
           ls -l /dev/kvm || echo "::warning title=KVM::/dev/kvm not available"
 
-      - name: Install, launch and watch the app
+      # Two gates, in order, both of which must pass:
+      #   1. smoke-test.sh  -> the APK launches and stays up (the original bug)
+      #   2. perf-test.sh   -> cold start / warm start / memory budgets
+      # `set -e` matters: the runner executes this block without it, so without
+      # the guard a failing smoke test would be masked by the perf step and the
+      # job would go green anyway.
+      - name: Install, launch, then measure
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -186,7 +197,10 @@ jobs:
           target: google_apis
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: bash .github/scripts/smoke-test.sh
+          script: |
+            set -e
+            bash .github/scripts/smoke-test.sh
+            bash .github/scripts/perf-test.sh
 
       - name: Upload logcat
         if: always()
@@ -194,4 +208,12 @@ jobs:
         with:
           name: emulator-logcat
           path: smoke/
+          if-no-files-found: warn
+
+      - name: Upload performance report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: emulator-performance
+          path: perf/
           if-no-files-found: warn

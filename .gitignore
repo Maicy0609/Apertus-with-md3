@@ -37,3 +37,9 @@ __pycache__/
 
 # CI 校验脚本的输出目录 (.github/scripts/verify-apk.sh)
 verify/
+
+# 性能闸门的输出目录 (.github/scripts/perf-test.sh)
+perf/
+
+# 调研用的一次性目录 (下载的真实构件、反编译产物等)
+.research/
