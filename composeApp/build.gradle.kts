@@ -95,7 +95,14 @@ kotlin {
 
 android {
     namespace = "app.melody"
+
+    // API 37 is the first Android release that ships minor SDK versions: the
+    // published SDK package is `platforms;android-37.0`, `37.1`, `37.2`, and
+    // there is NO plain `platforms;android-37`. When `compileSdkMinor` is left
+    // unset, AGP looks for the plain `android-37` platform and aborts with
+    // "Failed to find target with hash string 'android-37'".
     compileSdk = 37
+    compileSdkMinor = 0
 
     defaultConfig {
         applicationId = "app.melody"

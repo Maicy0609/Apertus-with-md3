@@ -21,29 +21,70 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Report and install Android SDK packages
+      # NOTE: android-actions/setup-android was deliberately removed.
+      # Its v3 release runs `sdkmanager tools`, but the standalone `tools`
+      # package no longer exists in the SDK repository, so the action aborts
+      # with "Failed to find package 'tools'" before installing anything.
+      # The ubuntu runner image already ships a complete Android SDK, so we
+      # drive sdkmanager ourselves instead.
+      - name: Prepare the Android SDK
         run: |
-          set -x
-          sdkmanager --list_installed || true
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager "platform-tools" || true
-          sdkmanager "platforms;android-37" || \
-            echo "::warning title=SDK::platforms;android-37 is not published in this SDK channel"
-          sdkmanager --list_installed || true
+          set -uo pipefail
+
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_HOME=${ANDROID_HOME:-<unset>}"
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-<unset>}"
+          echo "SDK_ROOT=$SDK_ROOT"
+          echo "SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$SDK_ROOT" -maxdepth 5 -type f -name sdkmanager -print -quit || true)"
+          fi
+          echo "sdkmanager=$SDKMANAGER"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "::error title=SDK::sdkmanager was not found under $SDK_ROOT"
+            exit 1
+          fi
+
+          # sdkmanager is a Java program and needs the JDK that setup-java installed.
+          java -version
+
+          # Accept every licence quietly so Gradle is allowed to auto-download
+          # anything that is still missing (AGP does that by default).
+          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses > /dev/null 2>&1 || true
+
+          echo "------------- installed before -------------"
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" --list_installed || true
+
+          # API 37 is the first Android release published with minor SDK
+          # versions, so the platform package is `platforms;android-37.0`.
+          # There is no plain `platforms;android-37` in the SDK repository.
+          for pkg in "platform-tools" "platforms;android-37.0" "build-tools;37.0.0"; do
+            echo "------------- installing $pkg -------------"
+            "$SDKMANAGER" --sdk_root="$SDK_ROOT" "$pkg" \
+              || echo "::warning title=SDK::could not install $pkg with sdkmanager"
+          done
+
+          echo "------------- installed after --------------"
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" --list_installed || true
+
+          if [ ! -d "$SDK_ROOT/platforms/android-37.0" ]; then
+            echo "::warning title=SDK::platforms;android-37.0 is missing; Gradle will try to download it itself"
+            echo "--- available platform packages ---"
+            "$SDKMANAGER" --sdk_root="$SDK_ROOT" --list 2>/dev/null | grep -E 'platforms;android-3[0-9]' || true
+          fi
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -53,20 +94,22 @@ jobs:
 
       - name: Verify the built APK
         run: |
-          set -euo pipefail
+          set -uo pipefail
           APK=$(find composeApp/build/outputs/apk -name '*.apk' -print -quit)
           echo "APK=$APK"
-          test -n "$APK"
+          test -n "$APK" || { echo "::error title=APK::no .apk was produced"; exit 1; }
           ls -l "$APK"
-          AAPT2=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -maxdepth 2 -name aapt2 -print -quit 2>/dev/null || true)
+
+          AAPT2=$(find "${ANDROID_HOME:-${SDK_ROOT:-/usr/local/lib/android/sdk}}/build-tools" \
+            -maxdepth 2 -name aapt2 -print -quit 2>/dev/null || true)
           echo "aapt2: $AAPT2"
           if [ -n "$AAPT2" ]; then
-            echo "--- badging: launchable activity ---"
+            echo "--- badging: package + launchable activity ---"
             "$AAPT2" dump badging "$APK" | grep -E "package:|launchable-activity" || true
           fi
 
       - name: Upload debug APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: melody-debug-apk
           path: composeApp/build/outputs/apk/**/*.apk
@@ -74,7 +117,7 @@ jobs:
 
       - name: Upload build reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: build-reports
           path: |
@@ -89,16 +132,16 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
 
       - name: Download debug APK
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: melody-debug-apk
           path: apk
@@ -123,7 +166,7 @@ jobs:
 
       - name: Upload logcat
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: emulator-logcat
           path: smoke/

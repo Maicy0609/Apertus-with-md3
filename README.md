@@ -65,21 +65,55 @@ UI → State/Store → Repository → API (Ktor)
 
 ## 如何运行
 
+### Android（推荐：交给 GitHub Actions）
+
+本项目不在本地编译 Android 包。每次 push 到 `main` 都会自动触发
+[`.github/workflows/android.yml`](.github/workflows/android.yml)：
+
+1. **Build debug APK** — `./gradlew :composeApp:assembleDebug`，产物上传为
+   artifact `melody-debug-apk`。
+2. **Launch smoke test (emulator)** — 把刚构建出来的 APK 装进 Android 模拟器，
+   通过 LAUNCHER intent 启动（也就是用户点图标的那条路径），然后检查
+   `logcat` 与 Android crash buffer，出现 `FATAL EXCEPTION` 就直接让流水线失败。
+
+下载 APK：
+
+```bash
+gh run list --repo Maicy0609/Apertus-with-md3
+gh run download <run-id> --name melody-debug-apk
+```
+
+或者直接在网页上打开 Actions → 某次运行 → Artifacts。
+
+也可以手动触发：Actions → Android CI → Run workflow（`workflow_dispatch`）。
+
 ### Desktop
 
 ```bash
 ./gradlew :composeApp:run
 ```
 
-### Android
-
-```bash
-./gradlew :composeApp:installDebug
-```
-
 ### iOS
 
 在 Xcode 中打开 `iosApp/iosApp.xcodeproj`，选择模拟器或设备运行。
+
+## Android 构建注意事项
+
+> **`android:name` 必须写全限定名。**
+>
+> `AndroidManifest.xml` 里的相对名（`.MainActivity`）是按 AGP 的
+> `namespace`（这里是 `app.melody`）解析的，**不是**按 Kotlin 源码的包名
+> （这里是 `app`）解析的。写成 `.MainActivity` 会让系统去找
+> `app.melody.MainActivity` 这个并不存在的类，启动瞬间抛
+> `ClassNotFoundException`，表现就是「点开图标立刻退出」。
+> 所以这里固定写成 `android:name="app.MainActivity"`。
+
+同理，改包名时请同时确认：
+
+- `composeApp/build.gradle.kts` 的 `namespace` / `applicationId`
+- `AndroidManifest.xml` 中 activity 的全限定名
+- 冒烟测试脚本 `.github/scripts/smoke-test.sh` 顶部的 `EXPECTED_ACTIVITY`
+
 
 ## 如何修改 API Base URL
 
