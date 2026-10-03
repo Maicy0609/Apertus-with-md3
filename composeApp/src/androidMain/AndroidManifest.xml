@@ -6,11 +6,16 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!--
-      NOTE: android:name MUST be fully qualified here.
-      Relative names (".MainActivity") are resolved against the AGP `namespace`
-      (app.apertus), which is NOT the Kotlin package of this source set (app).
-      A relative name therefore produced app.apertus.MainActivity, a class that
-      does not exist -> ClassNotFoundException on launch -> instant exit.
+      NOTE: android:name is kept fully qualified on purpose.
+      A relative name (".MainActivity") is resolved against the AGP `namespace`,
+      which is not necessarily the Kotlin package of this source set. When the
+      two disagreed, the relative form produced a class that did not exist ->
+      ClassNotFoundException at activity instantiation -> the app exited before
+      its first frame. `namespace` and the Kotlin package root are both
+      com.apertus.music now, so the relative form would work too, but the
+      explicit name keeps this file independent of that coincidence.
+      The CI "Verify the built APK" step asserts every component named here
+      actually exists in the DEX.
     -->
     <application
         android:allowBackup="true"
@@ -18,7 +23,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Apertus">
         <activity
-            android:name="app.MainActivity"
+            android:name="com.apertus.music.MainActivity"
             android:exported="true"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode"
             android:windowSoftInputMode="adjustResize">

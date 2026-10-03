@@ -5,6 +5,7 @@
 *.yaml  text eol=lf
 gradlew text eol=lf
 *.bat   text eol=crlf
+*.py    text eol=lf
 
 *.jar   binary
 *.aar   binary

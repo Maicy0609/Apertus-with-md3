@@ -8,14 +8,15 @@
 # the job if the app cannot be resolved, dies, or logs a fatal exception.
 #
 # This is the regression gate for the "APK opens then immediately exits" bug:
-# a relative android:name (".MainActivity") resolves against the AGP namespace
-# (app.apertus) instead of the Kotlin package (app), producing a
-# ClassNotFoundException at activity instantiation.
+# a relative android:name (".MainActivity") is resolved against the AGP
+# namespace rather than the Kotlin package; when the two disagreed Android
+# looked for a class that did not exist and the process died with a
+# ClassNotFoundException before it ever drew a frame.
 
 set -uo pipefail
 
-PACKAGE="app.apertus"
-EXPECTED_ACTIVITY="app.apertus/app.MainActivity"
+PACKAGE="com.apertus.music"
+EXPECTED_ACTIVITY="com.apertus.music/com.apertus.music.MainActivity"
 OUT_DIR="smoke"
 LOG="$OUT_DIR/logcat.txt"
 CRASH_LOG="$OUT_DIR/crash-buffer.txt"
@@ -72,7 +73,7 @@ adb logcat -b crash -d -v threadtime > "$CRASH_LOG" 2>&1 || true
 
 echo "== main log: $(wc -l < "$LOG") lines | crash buffer: $(wc -l < "$CRASH_LOG") lines"
 echo "----------------- app-related log -----------------"
-grep -E "app\.apertus|AndroidRuntime|ActivityTaskManager|APERTUS_SMOKE" "$LOG" | tail -n 60 || true
+grep -E "com\.apertus\.music|AndroidRuntime|ActivityTaskManager|APERTUS_SMOKE" "$LOG" | tail -n 60 || true
 echo "----------------- crash buffer -------------------"
 tail -n 60 "$CRASH_LOG" || true
 echo "-------------------------------------------------"
@@ -90,9 +91,9 @@ if grep -qE "FATAL EXCEPTION" "$LOG"; then
   FAILED=1
 fi
 
-if grep -q "app\.apertus" "$CRASH_LOG"; then
-  echo "::error title=Crash::app.apertus appears in the Android crash buffer"
-  grep -n -A 45 "app\.apertus" "$CRASH_LOG" | head -n 140
+if grep -q "com\.apertus\.music" "$CRASH_LOG"; then
+  echo "::error title=Crash::com.apertus.music appears in the Android crash buffer"
+  grep -n -A 45 "com\.apertus\.music" "$CRASH_LOG" | head -n 140
   FAILED=1
 fi
 

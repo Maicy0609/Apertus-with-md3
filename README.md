@@ -25,7 +25,7 @@
 ## 项目结构
 
 ```
-composeApp/src/commonMain/kotlin/app/
+composeApp/src/commonMain/kotlin/com/apertus/music/
 ├── App.kt                  # 应用入口：组装依赖、导航、响应式布局
 ├── model/
 │   └── Track.kt            # 唯一数据模型
@@ -72,7 +72,8 @@ UI → State/Store → Repository → API (Ktor)
 
 1. **Build debug APK** — `./gradlew :composeApp:assembleDebug`，产物上传为
    artifact `apertus-debug-apk`。
-2. **Launch smoke test (emulator)** — 把刚构建出来的 APK 装进 Android 模拟器，
+2. **Verify the built APK** — APK 完整性闸门，见下面的「APK 完整性校验」。
+3. **Launch smoke test (emulator)** — 把刚构建出来的 APK 装进 Android 模拟器，
    通过 LAUNCHER intent 启动（也就是用户点图标的那条路径），然后检查
    `logcat` 与 Android crash buffer，出现 `FATAL EXCEPTION` 就直接让流水线失败。
 
@@ -105,20 +106,27 @@ gh run download <run-id> --name apertus-debug-apk
 
 ## Android 构建注意事项
 
-> **`android:name` 必须写全限定名。**
+> **`android:name` 固定写全限定名。**
 >
-> `AndroidManifest.xml` 里的相对名（`.MainActivity`）是按 AGP 的
-> `namespace`（这里是 `app.apertus`）解析的，**不是**按 Kotlin 源码的包名
-> （这里是 `app`）解析的。写成 `.MainActivity` 会让系统去找
-> `app.apertus.MainActivity` 这个并不存在的类，启动瞬间抛
+> `AndroidManifest.xml` 里的相对名（`.MainActivity`）是按 AGP 的 `namespace`
+> 解析的，**不是**按 Kotlin 源码的包名解析的。两者不一致时（历史上
+> `namespace` 是 `app.melody`，Kotlin 包却是 `app`），`.MainActivity` 会让系统去找
+> `app.melody.MainActivity` 这个并不存在的类，启动瞬间抛
 > `ClassNotFoundException`，表现就是「点开图标立刻退出」。
-> 所以这里固定写成 `android:name="app.MainActivity"`。
+> 现在 `namespace` / `applicationId` / Kotlin 包都是 `com.apertus.music`，
+> 相对名也能工作，但这里仍然固定写全限定名，免得以后两者再分叉。
+>
+> CI 的 **Verify the built APK** 步骤会拿清单里点名的每一个组件类去 DEX 里核对，
+> 发现悬空引用直接让流水线失败 —— 这条静态闸门就是这类事故的回归测试。
 
-同理，改包名时请同时确认：
+改包名时请同时确认：
 
 - `composeApp/build.gradle.kts` 的 `namespace` / `applicationId`
+- Kotlin 源码目录 `composeApp/src/*/kotlin/com/apertus/music/` 与各文件的 `package`
 - `AndroidManifest.xml` 中 activity 的全限定名
-- 冒烟测试脚本 `.github/scripts/smoke-test.sh` 顶部的 `EXPECTED_ACTIVITY`
+- `.github/scripts/smoke-test.sh` 顶部的 `PACKAGE` / `EXPECTED_ACTIVITY`
+- `.github/scripts/verify-apk.sh` 顶部默认的 `PACKAGE` / `EXPECTED_ACTIVITY`
+  （`tools/apkcheck.py` 不用改，类名是现场从清单和 DEX 里读的）
 
 > **`compileSdk` 还需要 `compileSdkMinor`。**
 >
@@ -128,10 +136,40 @@ gh run download <run-id> --name apertus-debug-apk
 > `compileSdkMinor = 0`，否则 AGP 会去找并不存在的 `android-37`，
 > 报 `Failed to find target with hash string 'android-37'`。
 
+## APK 完整性校验
+
+`build` job 打完包后会跑 [`.github/scripts/verify-apk.sh`](.github/scripts/verify-apk.sh)，
+它和 [`tools/apkcheck.py`](tools/apkcheck.py) 一起覆盖下面这些项目。
+所有原始输出都会写进 `verify/`，并随 `build-reports` artifact 一起上传，便于事后核对。
+
+| 检查 | 工具 | 拦住什么 |
+|---|---|---|
+| ZIP 容器 / 条目 CRC | `unzip -tqq` + `tools/apkcheck.py` | 坏块、条目截断、CRC 错误 |
+| 每个 `classes*.dex` 的魔数与头部自洽 | `tools/apkcheck.py`（纯 Python，自己解 dex，不依赖外部工具） | 不是合法 dex、`file_size` / `header_size` / `endian_tag` 不自洽 |
+| `resources.arsc` 存在且未压缩 | `tools/apkcheck.py` | targetSdk ≥ 30 的资源表问题 |
+| 4 字节对齐、`.so` 4096 页对齐 | `zipalign -c -v 4` + `tools/apkcheck.py` | 未对齐导致安装失败或 native 库加载失败 |
+| 签名有效性 | `apksigner verify --verbose --print-certs` | 签名缺失/损坏，根本装不上 |
+| package / launcher / 权限 | `aapt2 dump badging` | 包名、入口 Activity、`INTERNET` 权限被改坏 |
+| **清单点名的类是否真的在 DEX 里** | `tools/apkcheck.py` | **「打开就闪退」：悬空的 `android:name`** |
+| dex 里确实定义了 launcher 类 | `apkanalyzer dex packages --defined-only` | 与上一条交叉确认 |
+
+最后两条是这次事故的静态回归闸门。清单里写了一个不存在的类名时，
+编译、打包、签名**全都会成功**，只有把 APK 装到设备上、点开的那一刻才会抛
+`ClassNotFoundException`。所以「APK 合法」不能只看能不能构建出来，
+必须显式验证 **清单里点名的类 == DEX 里真实存在的类**。
+
+`tools/apkcheck.py` 也可以单独用：
+
+```bash
+python3 tools/apkcheck.py app-debug.apk --manifest AndroidManifest.xml \
+  --expect-package com.apertus.music \
+  --expect-activity com.apertus.music.MainActivity
+```
+
 
 ## 如何修改 API Base URL
 
-编辑 `composeApp/src/commonMain/kotlin/app/data/MusicApi.kt`：
+编辑 `composeApp/src/commonMain/kotlin/com/apertus/music/data/MusicApi.kt`：
 
 ```kotlin
 const val API_BASE_URL = "https://your-api.com/api"

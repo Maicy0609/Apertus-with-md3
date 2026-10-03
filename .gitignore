@@ -30,3 +30,10 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Python (tools/apkcheck.py)
+__pycache__/
+*.pyc
+
+# CI 校验脚本的输出目录 (.github/scripts/verify-apk.sh)
+verify/

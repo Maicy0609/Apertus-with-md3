@@ -94,7 +94,10 @@ kotlin {
 }
 
 android {
-    namespace = "app.apertus"
+    // The Android package name. It matches the Kotlin package root
+    // (com.apertus.music) so that relative manifest class names would also
+    // resolve correctly -- see the note in AndroidManifest.xml.
+    namespace = "com.apertus.music"
 
     // API 37 is the first Android release that ships minor SDK versions: the
     // published SDK package is `platforms;android-37.0`, `37.1`, `37.2`, and
@@ -105,7 +108,7 @@ android {
     compileSdkMinor = 0
 
     defaultConfig {
-        applicationId = "app.apertus"
+        applicationId = "com.apertus.music"
         minSdk = 24
         targetSdk = 37
         versionCode = 1
@@ -126,6 +129,6 @@ android {
 
 compose.desktop {
     application {
-        mainClass = "app.MainKt"
+        mainClass = "com.apertus.music.MainKt"
     }
 }

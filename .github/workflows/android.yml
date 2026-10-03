@@ -117,21 +117,12 @@ jobs:
       - name: Build debug APK
         run: ./gradlew :composeApp:assembleDebug --stacktrace --no-daemon
 
+      # APK 合法性 / 完整性闸门。见 .github/scripts/verify-apk.sh:
+      # ZIP + dex 头部 + 对齐 + 压缩方式 + 签名 + **清单里点名的类是否真的在 DEX 里**。
+      # 最后一条是"APK 打开就闪退"的静态回归闸门 —— 编译/打包/签名都会通过,
+      # 只有清单引用了一个不存在的类时才会在运行期炸。
       - name: Verify the built APK
-        run: |
-          set -uo pipefail
-          APK=$(find composeApp/build/outputs/apk -name '*.apk' -print -quit)
-          echo "APK=$APK"
-          test -n "$APK" || { echo "::error title=APK::no .apk was produced"; exit 1; }
-          ls -l "$APK"
-
-          AAPT2=$(find "${ANDROID_HOME:-${SDK_ROOT:-/usr/local/lib/android/sdk}}/build-tools" \
-            -maxdepth 2 -name aapt2 -print -quit 2>/dev/null || true)
-          echo "aapt2: $AAPT2"
-          if [ -n "$AAPT2" ]; then
-            echo "--- badging: package + launchable activity ---"
-            "$AAPT2" dump badging "$APK" | grep -E "package:|launchable-activity" || true
-          fi
+        run: bash .github/scripts/verify-apk.sh
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v7
@@ -148,6 +139,7 @@ jobs:
           path: |
             **/build/reports/**
             **/build/outputs/logs/**
+            verify/**
           if-no-files-found: ignore
 
   smoke-test:
