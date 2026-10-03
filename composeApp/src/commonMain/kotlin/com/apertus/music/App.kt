@@ -1,4 +1,4 @@
-﻿package com.apertus.music
+package com.apertus.music
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -34,8 +34,8 @@ import com.apertus.music.ui.SettingsScreen
 /**
  * Application root.
  *
- * Wiring (no DI framework 鈥?created here):
- *   GadulkaPlayer 鈫?GadulkaPlayerController 鈫?PlayerStore 鈫?AppState 鈫?UI
+ * Wiring (no DI framework — created here):
+ *   GadulkaPlayer → GadulkaPlayerController → PlayerStore → AppState → UI
  *
  * FakeMusicRepository provides demo tracks; swap with
  * MusicRepository(KtorMusicApi(httpClient)) when your API is ready.

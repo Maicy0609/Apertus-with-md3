@@ -1,4 +1,4 @@
-﻿package com.apertus.music.components
+package com.apertus.music.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically

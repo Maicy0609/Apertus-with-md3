@@ -1,4 +1,4 @@
-﻿package com.apertus.music
+package com.apertus.music
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity

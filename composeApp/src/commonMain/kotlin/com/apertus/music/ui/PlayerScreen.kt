@@ -1,4 +1,4 @@
-﻿package com.apertus.music.ui
+package com.apertus.music.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -81,7 +81,7 @@ fun PlayerScreen(
         ) {
             Spacer(Modifier.height(8.dp))
 
-            // Artwork 鈥?large, centered
+            // Artwork — large, centered
             Box(
                 modifier = Modifier
                     .fillMaxWidth(0.85f)
@@ -101,7 +101,7 @@ fun PlayerScreen(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
-                    text = currentTrack?.title ?: "鈥?,
+                    text = currentTrack?.title ?: "—",
                     style = MaterialTheme.typography.headlineSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -189,7 +189,7 @@ fun PlayerScreen(
 
             if (isLoading) {
                 Text(
-                    "Buffering鈥?,
+                    "Buffering…",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

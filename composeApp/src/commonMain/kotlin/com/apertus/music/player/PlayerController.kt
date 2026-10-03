@@ -1,4 +1,4 @@
-﻿package com.apertus.music.player
+package com.apertus.music.player
 
 import com.apertus.music.model.Track
 import kotlinx.coroutines.flow.StateFlow

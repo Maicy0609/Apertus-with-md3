@@ -1,4 +1,4 @@
-﻿package com.apertus.music.state
+package com.apertus.music.state
 
 import com.apertus.music.data.MusicRepository
 import com.apertus.music.model.Track
@@ -18,7 +18,7 @@ sealed interface Screen {
 
 /**
  * Top-level app state: navigation, track list, and wiring to PlayerStore.
- * No DI framework 鈥?instances are created at the platform entry point.
+ * No DI framework — instances are created at the platform entry point.
  */
 class AppState(
     val repository: MusicRepository,

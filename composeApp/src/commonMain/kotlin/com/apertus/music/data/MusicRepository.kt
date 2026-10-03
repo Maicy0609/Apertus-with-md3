@@ -1,4 +1,4 @@
-﻿package com.apertus.music.data
+package com.apertus.music.data
 
 import com.apertus.music.model.Track
 

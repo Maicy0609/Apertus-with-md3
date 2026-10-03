@@ -1,4 +1,4 @@
-﻿package com.apertus.music
+package com.apertus.music
 
 import androidx.compose.ui.window.ComposeUIViewController
 

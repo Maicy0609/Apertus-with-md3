@@ -1,4 +1,4 @@
-﻿package com.apertus.music.model
+package com.apertus.music.model
 
 import kotlinx.serialization.Serializable
 

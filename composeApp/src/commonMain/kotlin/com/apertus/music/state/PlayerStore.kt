@@ -1,4 +1,4 @@
-﻿package com.apertus.music.state
+package com.apertus.music.state
 
 import com.apertus.music.model.Track
 import com.apertus.music.player.PlayerController

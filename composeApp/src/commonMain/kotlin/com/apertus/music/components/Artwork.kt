@@ -1,4 +1,4 @@
-﻿package com.apertus.music.components
+package com.apertus.music.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box

@@ -1,4 +1,4 @@
-﻿package com.apertus.music.player
+package com.apertus.music.player
 
 import com.apertus.music.model.Track
 import eu.iamkonstantin.kotlin.gadulka.ErrorListener
@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
 /**
  * Thin adapter from Gadulka's polling-based API to the app's own PlayerController.
  *
- * Gadulka does not expose StateFlow 鈥?it exposes synchronous getters
+ * Gadulka does not expose StateFlow — it exposes synchronous getters
  * (currentPlayerState / currentPosition / currentDuration). This controller
  * polls every 300 ms (matching Gadulka's own rememberGadulkaLiveState cadence)
  * and exposes StateFlows so the rest of the app stays reactive.

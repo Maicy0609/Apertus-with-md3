@@ -1,4 +1,4 @@
-﻿package com.apertus.music.components
+package com.apertus.music.components
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement

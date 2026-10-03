@@ -1,4 +1,4 @@
-﻿package com.apertus.music.ui
+package com.apertus.music.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -64,7 +64,7 @@ fun SettingsScreen(
             Spacer(Modifier.height(24.dp))
 
             Text(
-                "Apertus 鈥?a lightweight cross-platform music player shell.\n" +
+                "Apertus — a lightweight cross-platform music player shell.\n" +
                     "Replace FakeMusicRepository with your own API to go live.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
