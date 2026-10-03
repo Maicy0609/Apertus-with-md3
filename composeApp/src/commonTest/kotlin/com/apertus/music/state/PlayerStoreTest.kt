@@ -6,8 +6,10 @@ import com.apertus.music.model.Track
 import com.apertus.music.player.PlayerController
 import com.apertus.music.player.PlayerState
 import com.apertus.music.player.PlayerStatus
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -54,14 +56,17 @@ private class FakePlayerController : PlayerController {
 class PlayerStoreTest {
 
     /**
-     * The store starts three collectors that never complete, so it must be
-     * given [TestScope.backgroundScope]: `runTest` waits for every coroutine in
-     * the test scope itself to finish and would otherwise fail with
-     * `UncompletedCoroutinesError`. Background coroutines are cancelled when
-     * the test body returns.
+     * The store starts three collectors that never complete, so it must not be
+     * handed the test scope itself: `runTest` waits for every coroutine in that
+     * scope and fails with `UncompletedCoroutinesError`.
+     *
+     * It gets its own scope on an *unconfined* test dispatcher backed by the
+     * test's own scheduler, and the tests still call `advanceUntilIdle()`. That
+     * covers both dispatch models: eager work has already been applied, and
+     * anything the dispatcher did queue is drained before the assertions run.
      */
     private fun TestScope.storeWith(controller: PlayerController) =
-        PlayerStore(controller, backgroundScope)
+        PlayerStore(controller, CoroutineScope(UnconfinedTestDispatcher(testScheduler)))
 
     /**
      * Regression test for the reported "seeking takes two seconds to respond"
@@ -72,10 +77,10 @@ class PlayerStoreTest {
     fun aSeekIsVisibleBeforeTheBackendReportsIt() = runTest {
         val controller = FakePlayerController()
         val store = storeWith(controller)
-        advanceUntilIdle() // collectors are live, both sides sitting at 0
 
         store.seekTo(42_000L)
 
+        advanceUntilIdle()
         assertEquals(42_000L, store.position.value)
         assertEquals(42_000L, controller.lastSeekMillis)
 
@@ -104,7 +109,6 @@ class PlayerStoreTest {
     fun backendPositionUpdatesReachTheStore() = runTest {
         val controller = FakePlayerController()
         val store = storeWith(controller)
-        advanceUntilIdle()
 
         controller.currentPositionMillis.value = 5_000L
         advanceUntilIdle()
@@ -116,7 +120,6 @@ class PlayerStoreTest {
     fun playbackStatusIsMirroredFromTheController() = runTest {
         val controller = FakePlayerController()
         val store = storeWith(controller)
-        advanceUntilIdle()
 
         controller.state.value = PlayerState(status = PlayerStatus.Playing)
         advanceUntilIdle()
@@ -130,6 +133,19 @@ class PlayerStoreTest {
         controller.state.value = PlayerState(status = PlayerStatus.Error, error = "backend exploded")
         advanceUntilIdle()
         assertEquals("backend exploded", store.error.value)
+    }
+
+    @Test
+    fun playingWithNoBufferingLeavesTheLoadingFlagDown() = runTest {
+        val controller = FakePlayerController()
+        val store = storeWith(controller)
+
+        controller.state.value = PlayerState(status = PlayerStatus.Playing, isBuffering = false)
+        advanceUntilIdle()
+
+        assertEquals(true, store.isPlaying.value)
+        assertEquals(false, store.isLoading.value)
+        assertNull(store.error.value)
     }
 
     @Test
