@@ -166,10 +166,17 @@ sec "8. apkanalyzer dex packages 交叉确认 launcher 类"
 # --------------------------------------------------------------------------
 if [ -n "$APKANALYZER" ]; then
   if "$APKANALYZER" dex packages --defined-only "$APK" > "$OUT_DIR/dex-packages.txt" 2>&1; then
-    if grep -qE "^C d .* $LAUNCHER_CLASS\$" "$OUT_DIR/dex-packages.txt"; then
+    # 输出是制表符分隔的 `<kind> d <n>\t<n>\t<size>\t<name>`, 类名是最后一个字段,
+    # 所以不能用 `^C d .* $CLASS$`(空格锚定)去 grep —— 那样永远匹配不到。
+    if awk -F'\t' -v c="$LAUNCHER_CLASS" \
+         '$1 ~ /^C d / && $NF == c { found = 1 } END { exit(found ? 0 : 1) }' \
+         "$OUT_DIR/dex-packages.txt"; then
       ok "dex 里确实定义了 $LAUNCHER_CLASS"
     else
-      bad "dex 里找不到 $LAUNCHER_CLASS (与 apkcheck.py 结论不一致时以本条为准)"
+      bad "dex 里找不到 $LAUNCHER_CLASS (apkanalyzer 与 apkcheck.py 结论不一致时以本条为准)"
+      echo "      --- DEX 里名字含 'MainActivity' 的类 ---"
+      grep -E '^C d ' "$OUT_DIR/dex-packages.txt" | grep -F 'MainActivity' | head -n 5 | sed 's/^/      /'
+      echo "      (没有输出 = DEX 里连名字相近的类都没有)"
     fi
   else
     echo "  [--] apkanalyzer dex packages 不可用, 跳过 (apkcheck.py 已覆盖)"
