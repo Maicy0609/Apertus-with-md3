@@ -226,8 +226,14 @@ python3 tools/apkcheck.py app-debug.apk --manifest AndroidManifest.xml \
 - 脚本开头会把 `window/transition/animator_duration_scale` **重新设回 1.0**。
   smoke 任务用 `disable-animations: true` 跑是刻意的（要确定性），但性能闸门
   不能这么干 —— 否则量的是「动画全关」这个用户根本见不到的快版本。
-- 输出写在 `perf/`（`summary.txt` / `meminfo.txt` / `logcat.txt` / `gfxinfo.txt`），
-  随 artifact `emulator-performance` 上传，不管成功失败都传。
+- 量之前会先 `adb logcat -b all -c` 清空日志缓冲，崩溃 / ANR 判定只看本次运行，
+  不会把上一步冒烟留下的日志算到自己头上；`ANR in <包名>` 按包名匹配（这条由
+  ActivityManager 自己写，pid 不是 App 的），`FATAL EXCEPTION` 则从 **按 pid 过滤**
+  的 dump 里读，避免被别的进程的崩溃误伤。
+- `gfxinfo` 只打印、不判定：模拟器是 swiftshader 软件渲染，帧率数字反映的是
+  模拟器速度而不是 App 开销。
+- 输出写在 `perf/`（`summary.txt` / `meminfo.txt` / `logcat.txt` / `logcat-full.txt` /
+  `gfxinfo.txt`），随 artifact `emulator-performance` 上传，不管成功失败都传。
 - 模拟器任务里 smoke 和 perf 是同一个 `script` 块，前面有 `set -e`：这个 `set -e`
   是必须的，否则 smoke 失败了 perf 还会接着跑，job 反而变绿。
 

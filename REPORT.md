@@ -16,8 +16,9 @@
 | **症状** | `ActivityThread` 实例化 launcher activity 时抛 `ClassNotFoundException`，进程在第一帧之前就死掉 —— 就是"点开立刻退出" |
 | **修法** | `android:name` 一律写全限定名；同时把包名统一成 `com.apertus.music`，让 `namespace` / `applicationId` / Kotlin 包三者一致 |
 | **加固** | 启动路径不再依赖 Gadulka 的构造（改懒加载 + `release()`）；补上 `kotlinx-coroutines-android`（否则 `Dispatchers.Main` 会抛 "Module with the Main dispatcher had failed to initialize"）；错误状态会显示在播放页 |
-| **构建** | 全部在 GitHub Actions 完成，本地不编译。`.github/workflows/android.yml` 两个 job：`Build debug APK` + `Launch smoke test (emulator)` |
-| **新增闸门** | 构建后跑 APK 完整性校验（`tools/apkcheck.py` + `.github/scripts/verify-apk.sh`），其中最关键的一条是**清单里点名的每个组件类是否真的存在于 DEX 里** —— 这正是本次事故的静态回归测试 |
+| **构建** | 全部在 GitHub Actions 完成，本地不编译。`.github/workflows/android.yml` 两个 job：`Build debug APK` + `Launch smoke test + performance gate (emulator)` |
+| **新增闸门** | 一共四道：源码编码体检（`check-sources.sh`）、单元测试（`desktopTest`）、APK 完整性校验（`tools/apkcheck.py` + `.github/scripts/verify-apk.sh`）、模拟器启动冒烟 + 性能预算（`smoke-test.sh` / `perf-test.sh`）。APK 校验里最关键的一条是**清单里点名的每个组件类是否真的存在于 DEX 里** —— 这正是本次事故的静态回归测试 |
+| **界面与性能** | 跳转延迟从「要等 2 s」改成即时（§8）；MD3 Expressive 导航组件 + 自绘图标 + 动效（§9）；冷启动 / 热启动 / 内存 / ANR 四条真机预算进 CI（§10） |
 
 ### 流水线历史（含失败）
 
@@ -31,8 +32,11 @@
 | 37120644505 | `6eac01f` | ✗ | **源码被写坏**：19 个 `.kt` 全被加 BOM，5 个文件非 ASCII 文本成了 GBK 乱码 |
 | 37120774195 | `c066935` | ✗ | 编码修好了、编译通过；新加的 APK 闸门里有一条 `grep` 写错，误判 |
 | 37120911164 | `f12b40a` | 部分 | build ✓（含 verify ✓）；smoke ✗ —— ComponentName 短格式导致字符串比较失败 |
-| 37121121961 | `aa0a799` | **✓✓** | **最终全绿**：编码体检 + 构建 + APK 校验 + 模拟器冒烟全部通过 |
-| — | `4114968` | 未触发 | 纯 `.md` 提交，按 `paths-ignore` 规则不产生 run（已确认生效） |
+| 37121121961 | `aa0a799` | ✓✓ | 编码体检 + 构建 + APK 校验 + 模拟器冒烟全部通过 |
+| 37122352535 | `39fdc3e` | 部分 | build ✓（修掉 `PathFillType` / `animateFloat` 后编译通过）；`Run unit tests` ✗ —— `UncompletedCoroutinesError` |
+| 37122983341 | `64d07fe` | 部分 | build ✓；`Run unit tests` ✗ —— 3 个用例断言失败：`backgroundScope` 里的协程不会被 `advanceUntilIdle()` 驱动 |
+| 37123239623 | `7832ae5` | **✓✓** | **最终全绿**：26 个单测全过 + 8 项 APK 校验 + 模拟器冒烟 + 性能闸门（冷启动 1584 ms / 热启动 163 ms / PSS 103485 kB） |
+| — | `4114968`、`e645387`、`044b324` | 未触发 | 纯 `.md` / `.gitignore` 提交，按 `paths-ignore` 规则不产生 run（已确认生效） |
 
 失败记录保留在这里是有意的：**这次事故的教训就是"编译通过"证明不了任何事**。
 
@@ -142,6 +146,16 @@ manifest 时，`package` 取自 `namespace`，所以 `.MainActivity` 展开成�
 ### `c066935` / `f12b40a` / `aa0a799` — 修自己引入的问题
 
 见 §5.6 ~ §5.8。
+
+### `e0654cd` / `39fdc3e` / `c0734cb` / `64d07fe` / `4a12fcf` / `7832ae5` — 跳转延迟、Expressive 界面与性能闸门
+
+见 §8 ~ §10。这几笔把三件事一起做完：seek 从「等 2 s」改成即时、MD3 Expressive
+的导航组件与自绘图标、以及把冷启动 / 热启动 / 内存 / ANR 四条预算搬进 CI。
+
+其中后两笔是修 CI 自己暴露出来的问题：`4a12fcf` 把单测里的 `backgroundScope`
+换成 `CoroutineScope(UnconfinedTestDispatcher(testScheduler))`（前者的协程不会被
+`advanceUntilIdle()` 驱动，3 个用例因此断言到陈旧状态）；`7832ae5` 把性能闸门的
+崩溃 / ANR 判定按包名和 pid 收窄，避免被别的进程的日志误伤。
 
 ---
 
@@ -538,6 +552,82 @@ SMOKE TEST PASSED: com.apertus.music resolved to com.apertus.music/com.apertus.m
 注意这里 `resolved:` 一行同时打印了 adb 的**原始**输出（`com.apertus.music/.MainActivity`，
 短格式）和规范化后的结果 —— 这正是 §5.8 那次误报留下的痕迹，留着便于以后排查。
 
+### 7.4 最终全绿：单测 + 性能闸门（run 37123239623 / `7832ae5`）
+
+两个 job 全部 success：
+
+```
+JOB Build debug APK:                                  completed/success  (12:33:31Z -> 12:35:01Z)
+JOB Launch smoke test + performance gate (emulator):  completed/success  (12:35:05Z -> 12:37:49Z)
+```
+
+单元测试（`desktopTest`，26 个用例，来自 `build-reports` 产物里的 HTML 报告）：
+
+```
+tests: 26   failures: 0   success: 100%
+```
+
+APK 完整性校验 —— 8 项全过。注意 APK 从 24440500 字节降到 **17525969 字节**，
+因为 `material-icons-extended` 被自绘图标集取代后整包小掉了约 7 MB：
+
+```
+[ok] APK 存在 (17525969 字节)
+[ok] ZIP 结构完整, 无 CRC 错误 / 截断
+[ok] package 名 = com.apertus.music
+[ok] launcher activity = com.apertus.music.MainActivity
+[ok] 声明了 INTERNET 权限
+[ok] apkanalyzer manifest print 成功 (manifest 可解析)
+[ok] apkanalyzer 报告的包名一致
+[ok] zipalign 校验通过
+[ok] 签名有效
+manifest 点名的 5 个组件类, DEX 里全部存在
+[ok] apkcheck.py 通过
+[ok] dex 里确实定义了 com.apertus.music.MainActivity
+sha256=b205c8e0dec0344400be63ad91382ba0d1fe97a189493e09cdb7a9f718ffea02
+APK VERIFICATION PASSED: 容器 / dex / 对齐 / 签名 / 清单引用全部通过。
+```
+
+源码编码体检：
+
+```
+检查了 50 个文本文件
+[ok] 全部是无 BOM 的合法 UTF-8，且不含替换字符
+```
+
+模拟器冒烟：
+
+```
+resolved: 'com.apertus.music/com.apertus.music.MainActivity'   (adb 原始输出: 'com.apertus.music/.MainActivity')
+Events injected: 1
+topResumedActivity=ActivityRecord{3000675 u0 com.apertus.music/.MainActivity t8}
+pid: '3221'
+== main log: 37775 lines | crash buffer: 0 lines
+Displayed com.apertus.music/.MainActivity for user 0: +5s548ms
+SMOKE TEST PASSED
+```
+
+性能闸门（同一台 swiftshader 模拟器，每项 3 次取样取最好）：
+
+```
+== 0. Preconditions
+[ok] platform animation scales restored to 1.0 for the measurement
+[ok] log buffers cleared; only this run's events are judged
+== 1. Cold start   cold start: 1584 ms  (budget 9000 ms)     [ok]
+== 2. Warm start   warm start:  163 ms   (budget 3000 ms)     [ok]
+== 3. Memory       total PSS: 103485 kB  (budget 614400 kB)   [ok]
+== 4. Liveness     resumed: topResumedActivity=...com.apertus.music/.MainActivity
+                   app pid: 5114
+                   [ok] no ANR recorded for com.apertus.music
+                   [ok] no fatal exception in com.apertus.music during the run
+result=PASS
+PERFORMANCE GATE PASSED: cold 1584 ms, warm 163 ms, PSS 103485 kB.
+```
+
+第 5 节 `gfxinfo` 只做展示、不进预算：模拟器用 swiftshader 软件渲染，
+里面 `Janky frames: 14 (63.64%)`、`95th percentile: 1300ms` 反映的是**模拟器的
+渲染速度**而不是 App 的开销，所以脚本只打印、不判定。真正的回归保护由 §10 的
+预算表和 JVM 上的 `PerformanceTest.kt` 承担。
+
 ---
 
 ## 8. 跳转要等 2 秒：原因与修法
@@ -638,12 +728,12 @@ SkipPrevious / ArrowBack / Home / Tune / Library / Check / Equalizer / Logo`）�
 
 预算（写在脚本顶部，改一个数就能调）：
 
-| 指标 | 预算 | 取法 |
-|---|---|---|
-| 冷启动 `TotalTime` | ≤ 9000 ms | `am start -W`，先 force-stop |
-| 热启动 `TotalTime` | ≤ 3000 ms | 已在后台，按 HOME 再切回来 |
-| 总 PSS | ≤ 614400 kB（600 MB） | `dumpsys meminfo` |
-| 进程存活 | 必须 | 顶部 Activity 还是我们，且 logcat 里没有 `ANR in` / `FATAL EXCEPTION` |
+| 指标 | 预算 | 取法 | 实测（run 37123239623） |
+|---|---|---|---|
+| 冷启动 `TotalTime` | ≤ 9000 ms | `am start -W`，先 force-stop | 1584 ms |
+| 热启动 `TotalTime` | ≤ 3000 ms | 已在后台，按 HOME 再切回来 | 163 ms |
+| 总 PSS | ≤ 614400 kB（600 MB） | `dumpsys meminfo` | 103485 kB |
+| 进程存活 | 必须 | 顶部 Activity 还是我们，且 logcat 里没有 `ANR in` / `FATAL EXCEPTION` | 通过 |
 
 三个刻意的设计决定：
 
