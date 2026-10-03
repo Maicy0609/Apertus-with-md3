@@ -3,15 +3,25 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!--
+      NOTE: android:name MUST be fully qualified here.
+      Relative names (".MainActivity") are resolved against the AGP `namespace`
+      (app.melody), which is NOT the Kotlin package of this source set (app).
+      A relative name therefore produced app.melody.MainActivity, a class that
+      does not exist -> ClassNotFoundException on launch -> instant exit.
+    -->
     <application
         android:allowBackup="true"
         android:label="Melody"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Melody">
         <activity
-            android:name=".MainActivity"
+            android:name="app.MainActivity"
             android:exported="true"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden">
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

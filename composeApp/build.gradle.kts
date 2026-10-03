@@ -57,6 +57,11 @@ kotlin {
             implementation(libs.ktor.client.okhttp)
             implementation(libs.coil.network.okhttp)
             implementation(libs.androidx.activity.compose)
+            // Provides Dispatchers.Main (AndroidDispatcherFactory) for the app's
+            // CoroutineScopes. Relying on it being pulled in transitively by
+            // Compose/AndroidX is what produces "Module with the Main dispatcher
+            // had failed to initialize" crashes at startup.
+            implementation(libs.kotlinx.coroutines.android)
         }
 
         val desktopMain by getting {

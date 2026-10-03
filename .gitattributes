@@ -1,0 +1,14 @@
+# Keep shell scripts and CI YAML on LF endings regardless of the host OS,
+# otherwise GitHub Actions runs a CRLF script and bash chokes on it.
+*.sh    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+gradlew text eol=lf
+*.bat   text eol=crlf
+
+*.jar   binary
+*.aar   binary
+*.png   binary
+*.webp  binary
+*.jks   binary
+*.keystore binary

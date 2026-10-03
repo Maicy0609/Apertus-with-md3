@@ -30,13 +30,6 @@ import app.theme.AppTheme
 import app.ui.HomeScreen
 import app.ui.PlayerScreen
 import app.ui.SettingsScreen
-import eu.iamkonstantin.kotlin.gadulka.GadulkaPlayer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.calculateEndPadding
-import androidx.compose.foundation.layout.calculateStartPadding
-import androidx.compose.foundation.layout.systemBars
-import androidx.compose.ui.platform.LocalLayoutDirection
 
 /**
  * Application root.
@@ -50,13 +43,13 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 @Composable
 fun App() {
     AppTheme {
-        // Player lifecycle: create once, release when composition leaves.
-        val gadulka = remember { GadulkaPlayer() }
-        DisposableEffect(Unit) {
-            onDispose { gadulka.release() }
+        // The audio backend is built lazily on first playback, so nothing
+        // platform-specific can abort app startup. Release when composition leaves.
+        val controller = remember { GadulkaPlayerController() }
+        DisposableEffect(controller) {
+            onDispose { controller.release() }
         }
 
-        val controller = remember(gadulka) { GadulkaPlayerController(gadulka) }
         val playerStore = remember(controller) { PlayerStore(controller) }
         val appState = remember(playerStore) {
             AppState(

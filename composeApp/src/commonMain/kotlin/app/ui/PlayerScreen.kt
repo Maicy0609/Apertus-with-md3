@@ -53,6 +53,7 @@ fun PlayerScreen(
     val position by playerStore.position.collectAsState()
     val duration by playerStore.duration.collectAsState()
     val isLoading by playerStore.isLoading.collectAsState()
+    val error by playerStore.error.collectAsState()
 
     Scaffold(
         modifier = modifier,
@@ -191,6 +192,14 @@ fun PlayerScreen(
                     "Buffering…",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            error?.let { message ->
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
                 )
             }
         }

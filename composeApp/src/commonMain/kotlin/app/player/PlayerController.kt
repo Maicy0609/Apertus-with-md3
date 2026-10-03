@@ -23,4 +23,7 @@ interface PlayerController {
     fun resume()
     fun seekTo(positionMillis: Long)
     fun stop()
+
+    /** Releases the underlying platform player. Safe to call more than once. */
+    fun release()
 }
