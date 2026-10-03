@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+
 package com.apertus.music.state
 
 import com.apertus.music.model.Track
@@ -51,7 +53,15 @@ private class FakePlayerController : PlayerController {
 
 class PlayerStoreTest {
 
-    private fun TestScope.storeWith(controller: PlayerController) = PlayerStore(controller, this)
+    /**
+     * The store starts three collectors that never complete, so it must be
+     * given [TestScope.backgroundScope]: `runTest` waits for every coroutine in
+     * the test scope itself to finish and would otherwise fail with
+     * `UncompletedCoroutinesError`. Background coroutines are cancelled when
+     * the test body returns.
+     */
+    private fun TestScope.storeWith(controller: PlayerController) =
+        PlayerStore(controller, backgroundScope)
 
     /**
      * Regression test for the reported "seeking takes two seconds to respond"

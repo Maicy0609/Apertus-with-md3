@@ -35,7 +35,9 @@ composeApp/src/commonMain/kotlin/com/apertus/music/
 │   └── FakeMusicRepository.kt  # 测试数据（4 首示例歌曲）
 ├── player/
 │   ├── PlayerController.kt # 播放器最小抽象接口
-│   └── GadulkaPlayerController.kt  # Gadulka 适配层
+│   ├── GadulkaPlayerController.kt  # Gadulka 适配层
+│   ├── SeekGate.kt         # 跳转后的位置闸门（防进度条回弹）
+│   └── TimeFormat.kt       # m:ss / h:mm:ss / -m:ss 格式化（可单测）
 ├── state/
 │   ├── AppState.kt         # 导航 + 歌曲列表状态
 │   └── PlayerStore.kt      # 当前歌曲、播放状态、控制
@@ -46,9 +48,17 @@ composeApp/src/commonMain/kotlin/com/apertus/music/
 ├── components/
 │   ├── TrackItem.kt        # 列表项
 │   ├── MiniPlayer.kt       # 底部迷你播放器
+│   ├── EqualizerBars.kt    # 跳动音柱（缓冲指示 + 正在播放标记）
 │   └── Artwork.kt          # Coil 封面统一封装
 └── theme/
-    └── AppTheme.kt         # Material 3 深/浅色主题
+    ├── AppTheme.kt         # Apertus 配色 / 圆角 / 字阶
+    └── ApertusIcons.kt     # 自绘 24dp 图标集
+
+composeApp/src/commonTest/kotlin/com/apertus/music/
+├── player/SeekGateTest.kt        # 位置闸门
+├── player/TimeFormatTest.kt      # 时间格式
+├── player/PerformanceTest.kt     # 热路径性能护栏
+└── state/PlayerStoreTest.kt      # 含「跳转立刻可见」的回归测试
 ```
 
 ## 架构
@@ -63,6 +73,24 @@ UI → State/Store → Repository → API (Ktor)
 - 更换播放库只需修改 `GadulkaPlayerController`
 - 更换 API 只需修改 `MusicApi` / `MusicRepository`
 
+## 界面与动效
+
+配色、圆角、字阶都写在 `theme/AppTheme.kt`，是一套手写的 Apertus 品牌色，
+而不是 Android 动态取色 —— 这个 App 需要自己的辨识度。
+
+- **配色是量过的。** 浅色 / 深色两套 `ColorScheme` 的每一组前景/背景都跑过
+  WCAG 对比度计算，**最低 4.5:1**（正文门槛），实测最紧的一组是 5.88:1。
+  改颜色时请一并复核对比度。
+- **形状与字阶。** `Shapes` 从 8dp 到 36dp 递增；`Typography` 在 Material 3
+  默认字阶上把标题加粗、字距收紧一点。
+- **图标是自绘的。** `theme/ApertusIcons.kt` 里是一组 24dp `ImageVector`，
+  所以 `material-icons-extended` 已经从依赖里删掉了（它被 Compose 插件钉在
+  1.7.3，上游明确不再更新）。要加图标就在这个文件里加一条路径。
+- **动效。** 全屏播放器是 `AnimatedVisibility` 从底部滑入的浮层（而不是替换
+  整个屏幕），所以返回时曲库不用重建、封面不用重下；曲库与设置之间用
+  `Crossfade`；正在播放的那一行会轻微放大并显示跳动的音柱；迷你播放器有
+  一条随进度平滑推进的细线。
+
 ## 如何运行
 
 ### Android（推荐：交给 GitHub Actions）
@@ -72,10 +100,15 @@ UI → State/Store → Repository → API (Ktor)
 
 1. **Build debug APK** — `./gradlew :composeApp:assembleDebug`，产物上传为
    artifact `apertus-debug-apk`。
-2. **Verify the built APK** — APK 完整性闸门，见下面的「APK 完整性校验」。
-3. **Launch smoke test (emulator)** — 把刚构建出来的 APK 装进 Android 模拟器，
-   通过 LAUNCHER intent 启动（也就是用户点图标的那条路径），然后检查
-   `logcat` 与 Android crash buffer，出现 `FATAL EXCEPTION` 就直接让流水线失败。
+2. **Run unit tests** — `./gradlew :composeApp:desktopTest`，跑 `commonTest` 里的
+   跳转逻辑 / 时间格式 / 性能护栏。跑在 JVM 上，不需要模拟器。
+3. **Verify the built APK** — APK 完整性闸门，见下面的「APK 完整性校验」。
+4. **Launch smoke test + performance gate (emulator)** — 把刚构建出来的 APK 装进
+   Android 模拟器，通过 LAUNCHER intent 启动（也就是用户点图标的那条路径），
+   检查 `logcat` 与 Android crash buffer（出现 `FATAL EXCEPTION` 直接失败），
+   通过后再跑性能闸门，见下面的「性能闸门」。
+
+上面每一步都是**必须过**的：前一步失败，后面的步骤不会被执行，job 直接红。
 
 下载 APK：
 
@@ -166,6 +199,37 @@ python3 tools/apkcheck.py app-debug.apk --manifest AndroidManifest.xml \
   --expect-activity com.apertus.music.MainActivity
 ```
 
+
+## 性能闸门
+
+性能是一个指标，所以它进了 CI，而且**不过就红**。
+
+两层：
+
+| 层 | 跑在哪 | 脚本 | 挡住什么 |
+|---|---|---|---|
+| 热路径护栏 | JVM（`desktopTest`） | `composeApp/src/commonTest/.../PerformanceTest.kt` | 有人把跳转路径写成线性扫描、每次轮询都分配一堆对象之类的无界开销 |
+| 真机指标 | Android 模拟器 | [`.github/scripts/perf-test.sh`](.github/scripts/perf-test.sh) | 冷启动 / 热启动 / 内存 / ANR 回归 |
+
+`perf-test.sh` 的预算（脚本顶部可调）：
+
+| 指标 | 预算 | 说明 |
+|---|---|---|
+| 冷启动 `TotalTime` | ≤ 9000 ms | `am start -W`，force-stop 之后冷起 |
+| 热启动 `TotalTime` | ≤ 3000 ms | 已经在后台，按 HOME 再切回来 |
+| 总 PSS | ≤ 614400 kB（600 MB） | `dumpsys meminfo` |
+| 进程存活 | 必须 | 顶部 Activity 还是我们、logcat 里没有 `ANR in` / `FATAL EXCEPTION` |
+
+细节：
+
+- 每项取 **3 次里的最小值**，避免被模拟器抖动误伤。
+- 脚本开头会把 `window/transition/animator_duration_scale` **重新设回 1.0**。
+  smoke 任务用 `disable-animations: true` 跑是刻意的（要确定性），但性能闸门
+  不能这么干 —— 否则量的是「动画全关」这个用户根本见不到的快版本。
+- 输出写在 `perf/`（`summary.txt` / `meminfo.txt` / `logcat.txt` / `gfxinfo.txt`），
+  随 artifact `emulator-performance` 上传，不管成功失败都传。
+- 模拟器任务里 smoke 和 perf 是同一个 `script` 块，前面有 `set -e`：这个 `set -e`
+  是必须的，否则 smoke 失败了 perf 还会接着跑，job 反而变绿。
 
 ## 如何修改 API Base URL
 

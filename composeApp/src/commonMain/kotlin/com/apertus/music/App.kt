@@ -10,21 +10,26 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationRail
-import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ShortNavigationBar
+import androidx.compose.material3.ShortNavigationBarItem
 import androidx.compose.material3.Text
+import androidx.compose.material3.WideNavigationRail
+import androidx.compose.material3.WideNavigationRailItem
+import androidx.compose.material3.WideNavigationRailValue
+import androidx.compose.material3.rememberWideNavigationRailState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.apertus.music.data.FakeMusicRepository
@@ -37,6 +42,7 @@ import com.apertus.music.theme.AppTheme
 import com.apertus.music.ui.HomeScreen
 import com.apertus.music.ui.PlayerScreen
 import com.apertus.music.ui.SettingsScreen
+import kotlinx.coroutines.launch
 
 /**
  * Application root.
@@ -110,17 +116,18 @@ private fun NarrowLayout(appState: AppState) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
+            // ShortNavigationBar is the Material 3 Expressive navigation bar.
+            ShortNavigationBar {
+                ShortNavigationBarItem(
                     selected = currentScreen is Screen.Home,
                     onClick = { appState.navigateTo(Screen.Home) },
-                    icon = { Icon(ApertusIcons.Home, contentDescription = "Home") },
+                    icon = { Icon(ApertusIcons.Home, contentDescription = null) },
                     label = { Text("Home") }
                 )
-                NavigationBarItem(
+                ShortNavigationBarItem(
                     selected = currentScreen is Screen.Settings,
                     onClick = { appState.navigateTo(Screen.Settings) },
-                    icon = { Icon(ApertusIcons.Tune, contentDescription = "Settings") },
+                    icon = { Icon(ApertusIcons.Tune, contentDescription = null) },
                     label = { Text("Settings") }
                 )
             }
@@ -133,19 +140,39 @@ private fun NarrowLayout(appState: AppState) {
 @Composable
 private fun WideLayout(appState: AppState) {
     val currentScreen by appState.currentScreen.collectAsState()
+
+    // WideNavigationRail is the Material 3 Expressive rail: it animates between a
+    // collapsed icon strip and an expanded rail with labels. Tapping the mark in the
+    // header toggles it.
+    val railState = rememberWideNavigationRailState(
+        initialValue = WideNavigationRailValue.Expanded
+    )
+    val railExpanded = railState.currentValue == WideNavigationRailValue.Expanded
+    val scope = rememberCoroutineScope()
+
     Row(modifier = Modifier.fillMaxSize()) {
-        NavigationRail {
-            NavigationRailItem(
+        WideNavigationRail(
+            state = railState,
+            modifier = Modifier.fillMaxHeight(),
+            header = {
+                IconButton(onClick = { scope.launch { railState.toggle() } }) {
+                    Icon(ApertusIcons.Logo, contentDescription = "展开 / 收起导航")
+                }
+            }
+        ) {
+            WideNavigationRailItem(
                 selected = currentScreen is Screen.Home,
                 onClick = { appState.navigateTo(Screen.Home) },
-                icon = { Icon(ApertusIcons.Home, contentDescription = "Home") },
-                label = { Text("Home") }
+                icon = { Icon(ApertusIcons.Home, contentDescription = null) },
+                label = { Text("Home") },
+                railExpanded = railExpanded
             )
-            NavigationRailItem(
+            WideNavigationRailItem(
                 selected = currentScreen is Screen.Settings,
                 onClick = { appState.navigateTo(Screen.Settings) },
-                icon = { Icon(ApertusIcons.Tune, contentDescription = "Settings") },
-                label = { Text("Settings") }
+                icon = { Icon(ApertusIcons.Tune, contentDescription = null) },
+                label = { Text("Settings") },
+                railExpanded = railExpanded
             )
         }
         ScreenHost(appState = appState, modifier = Modifier.fillMaxSize())

@@ -222,11 +222,14 @@ on:
 | 3 | Set up Gradle | `gradle/actions/setup-gradle@v6`（带缓存） |
 | 4 | Check source encoding | `check-sources.sh`：所有纳管文本文件必须是无 BOM 的合法 UTF-8（§5.6 的回归闸门） |
 | 5 | Build debug APK | `./gradlew :composeApp:assembleDebug --stacktrace --no-daemon` |
-| 6 | **Verify the built APK** | `verify-apk.sh`，见 §6 |
-| 7 | Upload debug APK | artifact `apertus-debug-apk`，`if-no-files-found: error` |
-| 8 | Upload build reports | `if: always()`，含 `verify/**`，便于失败后取证 |
+| 6 | **Run unit tests** | `./gradlew :composeApp:desktopTest --stacktrace --no-daemon`，跑 `commonTest` 里的跳转逻辑 / 时间格式 / 性能护栏。跑在 JVM 上，不需要模拟器 |
+| 7 | **Verify the built APK** | `verify-apk.sh`，见 §6 |
+| 8 | Upload debug APK | artifact `apertus-debug-apk`，`if-no-files-found: error` |
+| 9 | Upload build reports | `if: always()`，含 `verify/**`，便于失败后取证 |
 
-### 4.3 Job `Launch smoke test (emulator)`
+每一步都是**必须过**的：前一步失败，后面的步骤不会被执行，job 直接红。
+
+### 4.3 Job `Launch smoke test + performance gate (emulator)`
 
 `needs: build`。下载上一步的 APK，起 API 34 / x86_64 / `google_apis` 的模拟器
 （`-gpu swiftshader_indirect -no-window -no-snapshot-save`，先写
@@ -244,6 +247,14 @@ on:
    或进程已经消失 → 流水线失败。
 
 Why 走 monkey 而不是显式 `am start -n`：后者绕过 manifest，会把这一类 bug 放过去。
+
+冒烟通过后，同一个 `script` 块里紧接着跑
+[`.github/scripts/perf-test.sh`](.github/scripts/perf-test.sh)，见 §9。两块之间的
+`set -e` 是**必须**的：`reactivecircus/android-emulator-runner` 执行这个脚本块时并不
+自带 `set -e`，没有它的话冒烟失败也会被后面的性能步骤盖过去，job 反而变绿。
+
+- 性能报告上传为 artifact `emulator-performance`（`if: always()`，`path: perf/`）。
+- 测试日志上传为 artifact `emulator-logcat`（`path: smoke/`）。
 
 ---
 
@@ -529,7 +540,124 @@ SMOKE TEST PASSED: com.apertus.music resolved to com.apertus.music/com.apertus.m
 
 ---
 
-## 8. 怎么拿 APK
+## 8. 跳转要等 2 秒：原因与修法
+
+反馈是「跳转进度条要整整 2s 才有反应」。查下来是**三个问题叠在一起**，缺一个都不会
+这么明显：
+
+1. `ui/PlayerScreen.kt` 的 `Slider(value = progress)` 直接绑在 300 ms 轮询出来的位置上，
+   拖动过程中**没有任何本地状态** —— 于是下一次重组就把拇指拽回旧位置，看起来像「拖不动」。
+2. `onValueChange` 每动一下就 `playerStore.seekTo(...)`。一次拖动会发出**几十次** ExoPlayer
+   seek，每次 seek 都会触发一次重新缓冲。
+3. 松手之后，轮询在重新缓冲期间读到的 `currentPosition()` 还是**旧值**，拇指于是又跳回去一次。
+
+修法（三层，缺一层都还会回弹）：
+
+| 层 | 文件 | 做了什么 |
+|---|---|---|
+| 手势 | `ui/PlayerScreen.kt` | 拖动期间只写本地 `var scrubFraction`，**不碰播放器**；`onValueChangeFinished` 里发**恰好一次** seek，然后清掉 |
+| 状态 | `state/PlayerStore.kt` | `seekTo(target)` 先把 `_position.value = target` 写进去，再通知 controller —— UI 立刻看到新位置，不用等后端 |
+| 后端 | `player/SeekGate.kt` + `player/GadulkaPlayerController.kt` | 跳转后由闸门接管位置：轮询报回来的值与目标**在 400 ms 容差内**才认；**超过 1500 ms** 直接认命（万一 seek 根本没落地，进度条也不会永远冻住） |
+
+`SeekGate` 是纯逻辑、时钟可注入，所以能单测。回归测试是
+`composeApp/src/commonTest/kotlin/com/apertus/music/state/PlayerStoreTest.kt` 里的
+`aSeekIsVisibleBeforeTheBackendReportsIt`：`seekTo(42_000)` 之后，即使假后端
+仍然报 0，`position` 也必须是 42_000 且保持不变。
+
+## 9. 界面：MD3 Expressive、动效与自绘图标
+
+### 9.1 MD3 Expressive 在 Compose Multiplatform 1.9.0 里到底有什么
+
+`compose.material3` 访问器实际发出的坐标是 `org.jetbrains.compose.material3:material3:1.9.0`
+（不是版本目录里写的 1.12.1 —— 那批别名是死的，见 §5.5）。为了不靠猜，我把这个版本的
+`sources.jar` 从 Maven Central 下下来，**在真实源码里逐个查符号**：
+
+| 符号 | 结果 |
+|---|---|
+| `MaterialExpressiveTheme` | 存在但是 **`internal`** —— App 侧根本调不到 |
+| `MotionScheme` / `MotionScheme.expressive()` / `.standard()` | 同样 **`internal`** |
+| 公开的 `MaterialTheme(...)` | 只有 `colorScheme / shapes / typography / content` 四个参数，**没有 `motionScheme`**；带 `motionScheme` 的那个重载是 `internal` |
+| `MaterialShapes` | **不存在** |
+| `LoadingIndicator` / `ContainedLoadingIndicator` | **没有公开函数**（只有 `tokens/LoadingIndicatorTokens.kt`） |
+| `HorizontalFloatingToolbar` / `VerticalFloatingToolbar` / `FloatingToolbarDefaults` | **不存在** |
+| `FloatingActionButtonMenu` / `ToggleFloatingActionButton` | **不存在** |
+| `SplitButtonLayout` | **不存在** |
+| `ButtonGroup` | **没有公开 API**（只有 token 文件） |
+| 带 `thumbTrackGapSize` / `trackInsideCornerSize` 的 `Slider` 重载 | **`internal`**；公开的 `Slider` 只有 `value / onValueChange / modifier / enabled / valueRange / steps / onValueChangeFinished / colors / interactionSource` |
+| `WideNavigationRail` / `WideNavigationRailItem` / `WideNavigationRailState` / `WideNavigationRailValue` / `rememberWideNavigationRailState` / `ModalWideNavigationRail` | **公开可用** |
+| `ShortNavigationBar` / `ShortNavigationBarItem` | **公开可用** |
+
+结论：Expressive 的**主题与动效方案**在 CMP 1.9.0 里还没有公开 API，所以主题继续由
+`MaterialTheme` 承载自己那套 palette / shapes / typography，而不是去调一个调不到的
+`MaterialExpressiveTheme`。但 Expressive 的**导航组件**是公开的，所以直接用上了：
+
+- 宽屏用 `WideNavigationRail`（`state = rememberWideNavigationRailState(initialValue = Expanded)`，
+  头部图标可点击在展开/收起之间切换动画）；
+- 窄屏用 `ShortNavigationBar`。
+
+这两个替换掉了原来的 `NavigationRail` / `NavigationBar`。
+
+### 9.2 配色是量过的
+
+`theme/AppTheme.kt` 里是一套手写的 Apertus 品牌色。浅色 / 深色两套 `ColorScheme` 的
+每一组前景-背景都跑过 WCAG 对比度计算，**全部 ≥ 4.5:1**（正文门槛），实测最紧的一组
+是 5.88:1。
+
+没有用 Android 动态取色：动态色会跟着用户壁纸走，两个用户看到的 Apertus 不是同一个
+Apertus。这个 App 需要自己的辨识度。
+
+`Shapes` 从 8dp 到 36dp 递增；`Typography` 在 Material 3 默认字阶上把标题加粗、字距收紧。
+
+### 9.3 动效
+
+- 全屏播放器是 `AnimatedVisibility` 从底部滑入的**浮层**，而不是替换整个屏幕 ——
+  曲库始终在下面保持着，返回时不需要重建列表、不需要重下封面。
+- 曲库与设置之间用 `Crossfade`（240 ms）。
+- 正在播放的那一行会轻微放大（1f ↔ 0.985f）并显示跳动的音柱。
+- 迷你播放器有一条随进度平滑推进的细线。
+- 播放/暂停图标用 `Crossfade` 切换，主按钮按下时缩放。
+
+### 9.4 图标是自绘的
+
+`theme/ApertusIcons.kt`：一组 24dp 的 `ImageVector`（`Play / Pause / SkipNext /
+SkipPrevious / ArrowBack / Home / Tune / Library / Check / Equalizer / Logo`），
+只用 `MoveTo / LineTo / Close`，填充一个纯色，由 Material 3 的 `Icon` 着色。
+
+因为不再用任何 `Icons.Filled.*`，所以 `implementation(compose.materialIconsExtended)`
+已经从 `composeApp/build.gradle.kts` 删掉了 —— 这个 artifact 被 Compose 插件钉在
+**1.7.3**，上游明确说不会再更新。
+
+## 10. 性能闸门
+
+性能是一个指标，所以它进了 CI，而且**不过就红**。两层：
+
+| 层 | 跑在哪 | 文件 | 挡住什么 |
+|---|---|---|---|
+| 热路径护栏 | JVM（`desktopTest`） | `composeApp/src/commonTest/kotlin/com/apertus/music/player/PerformanceTest.kt` | 有人把跳转路径写成线性扫描、每次轮询都分配一堆对象之类的**无界开销** |
+| 真机指标 | Android 模拟器 | [`.github/scripts/perf-test.sh`](.github/scripts/perf-test.sh) | 冷启动 / 热启动 / 内存 / ANR 回归 |
+
+预算（写在脚本顶部，改一个数就能调）：
+
+| 指标 | 预算 | 取法 |
+|---|---|---|
+| 冷启动 `TotalTime` | ≤ 9000 ms | `am start -W`，先 force-stop |
+| 热启动 `TotalTime` | ≤ 3000 ms | 已在后台，按 HOME 再切回来 |
+| 总 PSS | ≤ 614400 kB（600 MB） | `dumpsys meminfo` |
+| 进程存活 | 必须 | 顶部 Activity 还是我们，且 logcat 里没有 `ANR in` / `FATAL EXCEPTION` |
+
+三个刻意的设计决定：
+
+1. **每项取 3 次里的最小值**，避免被模拟器抖动误伤，让闸门只在真实回归时红。
+2. **脚本开头把 `window / transition / animator_duration_scale` 设回 1.0。** 冒烟任务用
+   `disable-animations: true` 跑是刻意的（要确定性），但性能闸门不能这么干 ——
+   否则量的是「动画全关」这个用户根本见不到的快版本。
+3. **JVM 层故意把预算放得很宽（2000 ms 上限）**，它不是真的测性能，而是防止有人
+   引入无界工作量；真正的数字由模拟器那层给。
+
+输出写在 `perf/`（`summary.txt` / `meminfo.txt` / `logcat.txt` / `gfxinfo.txt`），
+随 artifact `emulator-performance` 上传，成功失败都传。
+
+## 11. 怎么拿 APK
 
 ```bash
 gh run list --repo Maicy0609/Apertus-with-md3
@@ -544,7 +672,7 @@ gh run download <run-id> --repo Maicy0609/Apertus-with-md3 --name apertus-debug-
 
 ---
 
-## 9. 已知遗留 / 后续建议
+## 12. 已知遗留 / 后续建议
 
 1. **API 还是占位符**：`commonMain/.../data/MusicApi.kt` 里
    `const val API_BASE_URL = "https://example.com/api"`，而 `App.kt` 用的是
@@ -560,3 +688,13 @@ gh run download <run-id> --repo Maicy0609/Apertus-with-md3 --name apertus-debug-
    SDK 路径探测和模拟器步骤仍然有效。
 7. **`tools/apkcheck.py` 是面向 debug APK 写的**。将来引入 R8/资源压缩后，可以按
    `classrefcheck.py` 的思路再加一层"删掉的类有没有被别的类引用到"的检查。
+8. **MD3 Expressive 的主题与动效方案目前还调不到**（见 §9.1）：CMP 1.9.0 里
+   `MaterialExpressiveTheme` / `MotionScheme` / `MaterialShapes` 都还是 `internal`
+   或不存在。等上游公开之后，可以直接把手写的 shapes / typography 换成官方的，
+   动画 spec 也能改用官方的 spring 曲线。届时值得复查一次
+   `org.jetbrains.compose.material3:material3` 的版本。
+9. **性能闸门是在模拟器上量的**：真机一般更快，但模拟器抖动更大。如果哪天闸门
+   莫名其妙变红，先看 artifact `emulator-performance` 里的 `summary.txt` 再决定
+   是调预算还是把取值从"3 次取最小"改成"5 次取中位数"。
+10. **`MaterialTheme` 目前没有 `motionScheme` 参数可传**（见 §9.1），所以本项目的
+    动画时长 / 缓动都写在各自的组件里。等官方参数公开后可以集中到主题层。
