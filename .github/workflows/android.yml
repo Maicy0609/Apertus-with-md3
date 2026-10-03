@@ -114,6 +114,13 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
+      # 源码编码体检: 每个纳管文本文件必须是无 BOM 的合法 UTF-8。
+      # 见 .github/scripts/check-sources.sh —— 之前用 Windows PowerShell 批量改
+      # 包名, 给 19 个 .kt 文件加了 BOM 并把 5 个文件的非 ASCII 文本写成了 GBK
+      # 乱码, 导致编译失败。放在编译之前, 失败得更快也更好定位。
+      - name: Check source encoding
+        run: bash .github/scripts/check-sources.sh
+
       - name: Build debug APK
         run: ./gradlew :composeApp:assembleDebug --stacktrace --no-daemon
 

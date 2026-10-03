@@ -44,11 +44,29 @@ fi
 adb shell am force-stop "$PACKAGE" >/dev/null 2>&1
 
 echo "== Launcher activity resolved from AndroidManifest.xml"
-RESOLVED=$(adb shell cmd package resolve-activity --brief \
+RESOLVED_RAW=$(adb shell cmd package resolve-activity --brief \
   -a android.intent.action.MAIN -c android.intent.category.LAUNCHER "$PACKAGE" 2>/dev/null \
   | tr -d '\r' | grep -v '^[[:space:]]*$' | tail -n1)
-echo "resolved: '$RESOLVED'"
-echo "expected: '$EXPECTED_ACTIVITY'"
+
+# ComponentName 的「短格式」: 只要类名以包名开头, Android 就会把
+#   com.apertus.music/com.apertus.music.MainActivity
+# 打印成
+#   com.apertus.music/.MainActivity
+# 包名和 Kotlin 包一致之后就会命中这条规则(过去是 app.melody 包 + app.MainActivity
+# 类, 前缀对不上, 所以一直打印全名)。两边都展开成完整类名再比较。
+normalize_component() {
+  local comp="$1" pkg cls
+  pkg="${comp%%/*}"
+  cls="${comp#*/}"
+  case "$cls" in
+    .*) cls="${pkg}${cls}" ;;
+  esac
+  printf '%s/%s' "$pkg" "$cls"
+}
+RESOLVED=$(normalize_component "$RESOLVED_RAW")
+EXPECTED=$(normalize_component "$EXPECTED_ACTIVITY")
+echo "resolved: '$RESOLVED'   (adb 原始输出: '$RESOLVED_RAW')"
+echo "expected: '$EXPECTED'"
 
 START_TS=$(adb shell date +"%m-%d %H:%M:%S.000" | tr -d '\r')
 adb shell log -t APERTUS_SMOKE "launch marker" >/dev/null 2>&1
@@ -80,8 +98,8 @@ echo "-------------------------------------------------"
 
 FAILED=0
 
-if [ "$RESOLVED" != "$EXPECTED_ACTIVITY" ]; then
-  echo "::error title=Manifest::launcher resolves to '$RESOLVED', expected '$EXPECTED_ACTIVITY'"
+if [ "$RESOLVED" != "$EXPECTED" ]; then
+  echo "::error title=Manifest::launcher resolves to '$RESOLVED', expected '$EXPECTED'"
   FAILED=1
 fi
 
