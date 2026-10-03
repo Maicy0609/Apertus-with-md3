@@ -90,6 +90,11 @@ adb shell am force-stop "$PACKAGE" >/dev/null 2>&1
 total_time_of >/dev/null
 sleep 2
 
+# Drop everything the smoke test and the earlier steps logged, so the crash and
+# ANR checks below judge this run only instead of inheriting another step's noise.
+adb logcat -b all -c >/dev/null 2>&1 || adb logcat -c >/dev/null 2>&1 || true
+ok "log buffers cleared; only this run's events are judged"
+
 sec "1. Cold start (process killed, $REPEATS samples, best kept)"
 COLD_MS="$(best_of cold_start_sample)"
 echo "cold start: ${COLD_MS:-<no sample>} ms  (budget ${COLD_START_BUDGET_MS} ms)"
@@ -132,16 +137,30 @@ case "$RESUMED" in
     *) bad "the app is not the resumed activity after the launch loops" ;;
 esac
 
-adb logcat -d -v brief > "$OUT_DIR/logcat.txt" 2>/dev/null || true
-if grep -qiE "ANR in $PACKAGE|Application Not Responding" "$OUT_DIR/logcat.txt"; then
-    bad "the system recorded an ANR for $PACKAGE"
+APP_PID="$(adb shell pidof -s "$PACKAGE" 2>/dev/null | tr -d '\r')"
+echo "app pid: ${APP_PID:-<none>}"
+
+# Two dumps, because the evidence lives in different places: the ActivityManager
+# writes "ANR in <package>" under its own pid, while the app's crash trace is
+# written under the app's pid. Grepping the whole buffer for a bare
+# "Application Not Responding" would also match an unrelated system process and
+# fail the gate for something the app did not do.
+adb logcat -d -v brief > "$OUT_DIR/logcat-full.txt" 2>/dev/null || true
+if [ -n "$APP_PID" ]; then
+    adb logcat -d -v brief --pid="$APP_PID" > "$OUT_DIR/logcat.txt" 2>/dev/null || true
 else
-    ok "no ANR recorded"
+    cp "$OUT_DIR/logcat-full.txt" "$OUT_DIR/logcat.txt" 2>/dev/null || true
+fi
+
+if grep -qiE "ANR in ${PACKAGE}|Application Not Responding: ${PACKAGE}" "$OUT_DIR/logcat-full.txt"; then
+    bad "$PACKAGE was reported as not responding"
+else
+    ok "no ANR recorded for $PACKAGE"
 fi
 if grep -qF "FATAL EXCEPTION" "$OUT_DIR/logcat.txt"; then
-    bad "a FATAL EXCEPTION appeared during the run"
+    bad "a FATAL EXCEPTION appeared in $PACKAGE during the run"
 else
-    ok "no fatal exception during the run"
+    ok "no fatal exception in $PACKAGE during the run"
 fi
 
 sec "5. Frame timing (informational, not gated)"
