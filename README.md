@@ -95,7 +95,9 @@ gh run download <run-id> --name melody-debug-apk
 
 ### iOS
 
-在 Xcode 中打开 `iosApp/iosApp.xcodeproj`，选择模拟器或设备运行。
+仓库目前**还没有** `iosApp/` Xcode 工程。`commonMain` 与 `iosMain` 已经就绪
+（`MainViewController.kt` 是留给 Swift 侧的入口），需要自行新建 Xcode 工程
+并把 Kotlin 框架接进去。
 
 ## Android 构建注意事项
 
@@ -113,6 +115,14 @@ gh run download <run-id> --name melody-debug-apk
 - `composeApp/build.gradle.kts` 的 `namespace` / `applicationId`
 - `AndroidManifest.xml` 中 activity 的全限定名
 - 冒烟测试脚本 `.github/scripts/smoke-test.sh` 顶部的 `EXPECTED_ACTIVITY`
+
+> **`compileSdk` 还需要 `compileSdkMinor`。**
+>
+> API 37 是第一个带次版本号的 Android SDK，Google 只发布了
+> `platforms;android-37.0` / `37.1` / `37.2`，**没有** `platforms;android-37`。
+> 所以 `composeApp/build.gradle.kts` 里除了 `compileSdk = 37` 还必须写
+> `compileSdkMinor = 0`，否则 AGP 会去找并不存在的 `android-37`，
+> 报 `Failed to find target with hash string 'android-37'`。
 
 
 ## 如何修改 API Base URL
