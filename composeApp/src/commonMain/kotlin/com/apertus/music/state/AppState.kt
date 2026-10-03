@@ -22,9 +22,10 @@ sealed interface Screen {
  */
 class AppState(
     val repository: MusicRepository,
-    val playerStore: PlayerStore
+    val playerStore: PlayerStore,
+    /** Overridable so unit tests do not need a working Main dispatcher. */
+    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 ) {
-    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private val _currentScreen = MutableStateFlow<Screen>(Screen.Home)
     val currentScreen: StateFlow<Screen> = _currentScreen.asStateFlow()

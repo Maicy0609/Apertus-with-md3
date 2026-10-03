@@ -38,7 +38,6 @@ kotlin {
             implementation(compose.foundation)
             implementation(compose.material3)
             implementation(compose.ui)
-            implementation(compose.materialIconsExtended)
             implementation(compose.components.resources)
 
             implementation(libs.kotlinx.coroutines.core)
@@ -51,6 +50,13 @@ kotlin {
             implementation(libs.coil.compose)
 
             implementation(libs.gadulka)
+        }
+
+        // Unit tests for the playback/seek logic. Runs on the JVM via
+        // `:composeApp:desktopTest`, which is what CI gates on.
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
         }
 
         androidMain.dependencies {

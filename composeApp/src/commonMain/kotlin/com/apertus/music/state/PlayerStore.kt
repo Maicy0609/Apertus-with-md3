@@ -16,9 +16,10 @@ import kotlinx.coroutines.launch
  * Playlist is kept here so skipNext/skipPrevious work without a queue abstraction.
  */
 class PlayerStore(
-    private val controller: PlayerController
+    private val controller: PlayerController,
+    /** Overridable so unit tests do not need a working Main dispatcher. */
+    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 ) {
-    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private val _currentTrack = MutableStateFlow<Track?>(null)
     val currentTrack: StateFlow<Track?> = _currentTrack.asStateFlow()
@@ -70,7 +71,19 @@ class PlayerStore(
 
     fun pause() = controller.pause()
     fun resume() = controller.resume()
-    fun seekTo(positionMillis: Long) = controller.seekTo(positionMillis)
+
+    /**
+     * Jumps to [positionMillis].
+     *
+     * The position is applied locally before the backend is told, so the UI never
+     * has to wait for a poll round-trip to reflect the user's intent. The
+     * controller holds that value until the backend catches up.
+     */
+    fun seekTo(positionMillis: Long) {
+        val target = positionMillis.coerceAtLeast(0L)
+        _position.value = target
+        controller.seekTo(target)
+    }
 
     fun skipNext() {
         if (playlist.isEmpty()) return

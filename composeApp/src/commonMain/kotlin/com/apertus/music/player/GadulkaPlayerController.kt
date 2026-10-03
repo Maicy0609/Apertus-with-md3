@@ -15,13 +15,20 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+/** How often the backend is polled for state / position / duration. */
+private const val POLL_INTERVAL_MS = 300L
+
 /**
  * Thin adapter from Gadulka's polling-based API to the app's own PlayerController.
  *
  * Gadulka does not expose StateFlow — it exposes synchronous getters
  * (currentPlayerState / currentPosition / currentDuration). This controller
- * polls every 300 ms (matching Gadulka's own rememberGadulkaLiveState cadence)
- * and exposes StateFlows so the rest of the app stays reactive.
+ * polls every [POLL_INTERVAL_MS] (matching Gadulka's own rememberGadulkaLiveState
+ * cadence) and exposes StateFlows so the rest of the app stays reactive.
+ *
+ * Seeks are optimistic: [seekTo] publishes the new position immediately and a
+ * [SeekGate] suppresses the stale reads the backend emits while it re-buffers.
+ * Without that the progress bar snaps backwards on every scrub.
  *
  * UI and business logic never touch Gadulka directly.
  *
@@ -37,6 +44,9 @@ class GadulkaPlayerController(
 
     private var player: GadulkaPlayer? = null
     private var pollJob: Job? = null
+
+    /** Filters the backend's position reports — see [SeekGate]. */
+    private val seekGate = SeekGate()
 
     private val _state = MutableStateFlow(PlayerState())
     override val state: StateFlow<PlayerState> = _state.asStateFlow()
@@ -92,15 +102,21 @@ class GadulkaPlayerController(
                 }
                 // Never let a poll overwrite a real backend error.
                 if (!hasError) _state.value = polled
-                _currentPositionMillis.value = backend.currentPosition() ?: 0L
+
+                val reported = backend.currentPosition() ?: 0L
+                _currentPositionMillis.value =
+                    if (seekGate.accept(reported)) reported else seekGate.target
+
                 _durationMillis.value = backend.currentDuration()
-                delay(300)
+                delay(POLL_INTERVAL_MS)
             }
         }
     }
 
     override suspend fun play(track: Track) {
         val backend = playerOrNull() ?: return
+        // A new track invalidates any seek that was still settling.
+        seekGate.reset()
         _state.value = PlayerState(status = PlayerStatus.Loading, isBuffering = true)
         try {
             backend.play(url = track.streamUrl)
@@ -121,7 +137,12 @@ class GadulkaPlayerController(
     }
 
     override fun seekTo(positionMillis: Long) {
-        player?.let { runCatching { it.seekTo(positionMillis) } }
+        val target = positionMillis.coerceAtLeast(0L)
+        // Publish immediately instead of waiting up to a whole poll interval,
+        // plus a re-buffer, for the backend to admit it moved.
+        seekGate.begin(target)
+        _currentPositionMillis.value = target
+        player?.let { runCatching { it.seekTo(target) } }
     }
 
     override fun stop() {
@@ -131,6 +152,7 @@ class GadulkaPlayerController(
     override fun release() {
         pollJob?.cancel()
         pollJob = null
+        seekGate.reset()
         player?.let { runCatching { it.release() } }
         player = null
         _state.value = PlayerState(PlayerStatus.Idle)
