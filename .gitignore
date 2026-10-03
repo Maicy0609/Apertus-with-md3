@@ -43,3 +43,6 @@ perf/
 
 # 调研用的一次性目录 (下载的真实构件、反编译产物等)
 .research/
+
+# 用 `gh run download` 拉下来的 CI 产物 (临时排查用)
+_ci/
