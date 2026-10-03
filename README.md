@@ -1,4 +1,4 @@
-# Melody (Apertus-with-md3)
+# Apertus
 
 轻量级跨平台音乐播放器骨架。漂亮、现代、代码精简、方便后续接入自有 API。
 
@@ -71,7 +71,7 @@ UI → State/Store → Repository → API (Ktor)
 [`.github/workflows/android.yml`](.github/workflows/android.yml)：
 
 1. **Build debug APK** — `./gradlew :composeApp:assembleDebug`，产物上传为
-   artifact `melody-debug-apk`。
+   artifact `apertus-debug-apk`。
 2. **Launch smoke test (emulator)** — 把刚构建出来的 APK 装进 Android 模拟器，
    通过 LAUNCHER intent 启动（也就是用户点图标的那条路径），然后检查
    `logcat` 与 Android crash buffer，出现 `FATAL EXCEPTION` 就直接让流水线失败。
@@ -80,12 +80,16 @@ UI → State/Store → Repository → API (Ktor)
 
 ```bash
 gh run list --repo Maicy0609/Apertus-with-md3
-gh run download <run-id> --name melody-debug-apk
+gh run download <run-id> --name apertus-debug-apk
 ```
 
 或者直接在网页上打开 Actions → 某次运行 → Artifacts。
 
 也可以手动触发：Actions → Android CI → Run workflow（`workflow_dispatch`）。
+
+> 只改文档（`**.md` / `docs/**` / `LICENSE` / `.gitignore`）的提交**不会**触发
+> CI —— workflow 里配了 `paths-ignore`，这类 push 连一次运行都不会创建。
+> 既改文档又改代码的提交照常触发。
 
 ### Desktop
 
@@ -104,9 +108,9 @@ gh run download <run-id> --name melody-debug-apk
 > **`android:name` 必须写全限定名。**
 >
 > `AndroidManifest.xml` 里的相对名（`.MainActivity`）是按 AGP 的
-> `namespace`（这里是 `app.melody`）解析的，**不是**按 Kotlin 源码的包名
+> `namespace`（这里是 `app.apertus`）解析的，**不是**按 Kotlin 源码的包名
 > （这里是 `app`）解析的。写成 `.MainActivity` 会让系统去找
-> `app.melody.MainActivity` 这个并不存在的类，启动瞬间抛
+> `app.apertus.MainActivity` 这个并不存在的类，启动瞬间抛
 > `ClassNotFoundException`，表现就是「点开图标立刻退出」。
 > 所以这里固定写成 `android:name="app.MainActivity"`。
 

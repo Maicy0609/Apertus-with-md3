@@ -94,7 +94,7 @@ kotlin {
 }
 
 android {
-    namespace = "app.melody"
+    namespace = "app.apertus"
 
     // API 37 is the first Android release that ships minor SDK versions: the
     // published SDK package is `platforms;android-37.0`, `37.1`, `37.2`, and
@@ -105,7 +105,7 @@ android {
     compileSdkMinor = 0
 
     defaultConfig {
-        applicationId = "app.melody"
+        applicationId = "app.apertus"
         minSdk = 24
         targetSdk = 37
         versionCode = 1

@@ -1,10 +1,25 @@
 name: Android CI
 
+# Documentation-only changes do not need a full Android build: with
+# `paths-ignore` a push touching nothing but these paths starts no run at all.
+# A push that mixes docs and code still runs, which is what we want.
+# `.gitattributes` is deliberately NOT ignored -- it decides the line endings of
+# gradlew and of the CI shell scripts, so changes to it must be verified.
 on:
   push:
     branches: [ main, master ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
   pull_request:
     branches: [ main, master ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
   workflow_dispatch:
 
 concurrency:
@@ -121,7 +136,7 @@ jobs:
       - name: Upload debug APK
         uses: actions/upload-artifact@v7
         with:
-          name: melody-debug-apk
+          name: apertus-debug-apk
           path: composeApp/build/outputs/apk/**/*.apk
           if-no-files-found: error
 
@@ -153,7 +168,7 @@ jobs:
       - name: Download debug APK
         uses: actions/download-artifact@v8
         with:
-          name: melody-debug-apk
+          name: apertus-debug-apk
           path: apk
 
       - name: Enable KVM for the emulator

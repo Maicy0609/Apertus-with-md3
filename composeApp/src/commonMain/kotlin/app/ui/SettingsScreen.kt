@@ -64,7 +64,7 @@ fun SettingsScreen(
             Spacer(Modifier.height(24.dp))
 
             Text(
-                "Melody — a lightweight cross-platform music player shell.\n" +
+                "Apertus — a lightweight cross-platform music player shell.\n" +
                     "Replace FakeMusicRepository with your own API to go live.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant

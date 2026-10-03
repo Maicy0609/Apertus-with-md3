@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Matches LightColors.background in app/theme/AppTheme.kt -->
-    <color name="melody_window_background">#FFFBFE</color>
+    <color name="apertus_window_background">#FFFBFE</color>
 </resources>

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Melody / Apertus-with-md3 Android launch smoke test.
+# Apertus Android launch smoke test.
 #
 # Runs inside the GitHub Actions emulator job. It installs the freshly built
 # debug APK, launches it the way a user does -- through the LAUNCHER intent, so
@@ -9,13 +9,13 @@
 #
 # This is the regression gate for the "APK opens then immediately exits" bug:
 # a relative android:name (".MainActivity") resolves against the AGP namespace
-# (app.melody) instead of the Kotlin package (app), producing a
+# (app.apertus) instead of the Kotlin package (app), producing a
 # ClassNotFoundException at activity instantiation.
 
 set -uo pipefail
 
-PACKAGE="app.melody"
-EXPECTED_ACTIVITY="app.melody/app.MainActivity"
+PACKAGE="app.apertus"
+EXPECTED_ACTIVITY="app.apertus/app.MainActivity"
 OUT_DIR="smoke"
 LOG="$OUT_DIR/logcat.txt"
 CRASH_LOG="$OUT_DIR/crash-buffer.txt"
@@ -50,7 +50,7 @@ echo "resolved: '$RESOLVED'"
 echo "expected: '$EXPECTED_ACTIVITY'"
 
 START_TS=$(adb shell date +"%m-%d %H:%M:%S.000" | tr -d '\r')
-adb shell log -t MELODY_SMOKE "launch marker" >/dev/null 2>&1
+adb shell log -t APERTUS_SMOKE "launch marker" >/dev/null 2>&1
 
 echo "== Launching via LAUNCHER intent (monkey)"
 adb shell monkey -p "$PACKAGE" -c android.intent.category.LAUNCHER 1 2>&1 | tail -n 6
@@ -72,7 +72,7 @@ adb logcat -b crash -d -v threadtime > "$CRASH_LOG" 2>&1 || true
 
 echo "== main log: $(wc -l < "$LOG") lines | crash buffer: $(wc -l < "$CRASH_LOG") lines"
 echo "----------------- app-related log -----------------"
-grep -E "app\.melody|AndroidRuntime|ActivityTaskManager|MELODY_SMOKE" "$LOG" | tail -n 60 || true
+grep -E "app\.apertus|AndroidRuntime|ActivityTaskManager|APERTUS_SMOKE" "$LOG" | tail -n 60 || true
 echo "----------------- crash buffer -------------------"
 tail -n 60 "$CRASH_LOG" || true
 echo "-------------------------------------------------"
@@ -90,9 +90,9 @@ if grep -qE "FATAL EXCEPTION" "$LOG"; then
   FAILED=1
 fi
 
-if grep -q "app\.melody" "$CRASH_LOG"; then
-  echo "::error title=Crash::app.melody appears in the Android crash buffer"
-  grep -n -A 45 "app\.melody" "$CRASH_LOG" | head -n 140
+if grep -q "app\.apertus" "$CRASH_LOG"; then
+  echo "::error title=Crash::app.apertus appears in the Android crash buffer"
+  grep -n -A 45 "app\.apertus" "$CRASH_LOG" | head -n 140
   FAILED=1
 fi
 

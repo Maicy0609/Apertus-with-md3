@@ -18,5 +18,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "melody"
+rootProject.name = "Apertus"
 include(":composeApp")
