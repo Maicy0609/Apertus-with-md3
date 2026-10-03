@@ -1,16 +1,14 @@
 package com.apertus.music.ui
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -208,18 +206,23 @@ fun PlayerScreen(
 
             // Status line: animated equaliser while buffering, error text if the
             // backend refused to come up.
+            //
+            // Crossfade rather than AnimatedVisibility on purpose: this Box lives
+            // inside a Column, and AnimatedVisibility has a ColumnScope overload
+            // that wins implicit resolution here and then refuses to be called
+            // from a BoxScope. Crossfade has no scope-restricted variant.
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(28.dp),
                 contentAlignment = Alignment.Center
             ) {
-                AnimatedVisibility(
-                    visible = isLoading,
-                    enter = fadeIn(tween(180)),
-                    exit = fadeOut(tween(180))
-                ) {
-                    EqualizerBars()
+                Crossfade(
+                    targetState = isLoading,
+                    animationSpec = tween(durationMillis = 180),
+                    label = "buffering"
+                ) { buffering ->
+                    if (buffering) EqualizerBars()
                 }
                 error?.let { message ->
                     Text(
